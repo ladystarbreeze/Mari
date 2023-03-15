@@ -9,6 +9,7 @@ add_compile_options(-Wall -Wextra)
 set(SOURCES
     src/main.cpp
     src/common/file.cpp
+    src/core/intc.cpp
     src/core/Mari.cpp
     src/core/bus/bus.cpp
     src/core/cpu/cop0.cpp
@@ -18,6 +19,7 @@ set(SOURCES
 set(HEADERS
     src/common/file.hpp
     src/common/types.hpp
+    src/core/intc.hpp
     src/core/Mari.hpp
     src/core/bus/bus.hpp
     src/core/cpu/cop0.hpp

@@ -7,6 +7,8 @@
 
 #include <cstdio>
 
+#include "../intc.hpp"
+
 #include "../../common/file.hpp"
 
 namespace ps::bus {
@@ -111,6 +113,12 @@ u32 read32(u32 addr) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
     } else {
         switch (addr) {
+            case 0x1F801070:
+                std::printf("[Bus       ] 32-bit read @ I_STAT\n");
+                return intc::readStat();
+            case 0x1F801074:
+                std::printf("[Bus       ] 32-bit read @ I_MASK\n");
+                return intc::readMask();
             default:
                 std::printf("[Bus       ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
@@ -207,6 +215,12 @@ void write32(u32 addr, u32 data) {
             case 0x1F801060:
                 std::printf("[Bus       ] 32-bit write @ RAM_SIZE = 0x%08X\n", data);
                 break;
+            case 0x1F801070:
+                std::printf("[Bus       ] 32-bit write @ I_STAT = 0x%08X\n", data);
+                return intc::writeStat(data);
+            case 0x1F801074:
+                std::printf("[Bus       ] 32-bit write @ I_MASK = 0x%08X\n", data);
+                return intc::writeMask(data);
             case 0x1FFE0130:
                 std::printf("[Bus       ] 32-bit write @ CACHE_CONTROL = 0x%08X\n", data);
                 break;
