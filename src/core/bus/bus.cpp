@@ -8,6 +8,7 @@
 #include <cstdio>
 
 #include "../intc.hpp"
+#include "../timer/timer.hpp"
 
 #include "../../common/file.hpp"
 
@@ -157,6 +158,8 @@ void write8(u32 addr, u8 data) {
 void write16(u32 addr, u16 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         memcpy(&ram[addr], &data, sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
+        return timer::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPU), static_cast<u32>(MemorySize::SPU))) {
         std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X (SPU) = 0x%04X\n", addr, data);
     } else {

@@ -14,6 +14,7 @@ set(SOURCES
     src/core/bus/bus.cpp
     src/core/cpu/cop0.cpp
     src/core/cpu/cpu.cpp
+    src/core/timer/timer.cpp
 )
 
 set(HEADERS
@@ -24,6 +25,7 @@ set(HEADERS
     src/core/bus/bus.hpp
     src/core/cpu/cop0.hpp
     src/core/cpu/cpu.hpp
+    src/core/timer/timer.hpp
 )
 
 add_executable(Mari ${SOURCES} ${HEADERS})

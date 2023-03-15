@@ -12,24 +12,28 @@
 
 #include "bus/bus.hpp"
 #include "cpu/cpu.hpp"
+#include "timer/timer.hpp"
 #include "../common/types.hpp"
 
 namespace ps {
 
 /* --- Mari constants --- */
 
-constexpr i64 RUN_CYCLES = 32;
+constexpr i64 RUN_CYCLES = 64;
 
 void init(const char *biosPath, const char *isoPath) {
     std::printf("BIOS path: \"%s\"\nISO path: \"%s\"\n", biosPath, isoPath);
 
     bus::init(biosPath);
     cpu::init();
+    timer::init();
 }
 
 void run() {
     while (true) {
         cpu::step(RUN_CYCLES >> 1); // 2 cycles per instruction
+
+        timer::step(RUN_CYCLES);
     }
 }
 
