@@ -8,6 +8,7 @@
 #include <cstdio>
 
 #include "../intc.hpp"
+#include "../dmac/dmac.hpp"
 #include "../timer/timer.hpp"
 
 #include "../../common/file.hpp"
@@ -110,6 +111,8 @@ u32 read32(u32 addr) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u32));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::DMA), static_cast<u32>(MemorySize::DMA))) {
+        return dmac::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
     } else {
@@ -176,6 +179,8 @@ void write16(u32 addr, u16 data) {
 void write32(u32 addr, u32 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         memcpy(&ram[addr], &data, sizeof(u32));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::DMA), static_cast<u32>(MemorySize::DMA))) {
+        return dmac::write(addr, data);
     } else {
         switch (addr) {
             case 0x1F801000:

@@ -12,6 +12,7 @@
 
 #include "bus/bus.hpp"
 #include "cpu/cpu.hpp"
+#include "dmac/dmac.hpp"
 #include "timer/timer.hpp"
 #include "../common/types.hpp"
 
@@ -26,6 +27,7 @@ void init(const char *biosPath, const char *isoPath) {
 
     bus::init(biosPath);
     cpu::init();
+    dmac::init();
     timer::init();
 }
 
