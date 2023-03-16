@@ -11,6 +11,7 @@
 
 #include "../intc.hpp"
 #include "../scheduler.hpp"
+#include "../bus/bus.hpp"
 
 namespace ps::dmac {
 
@@ -83,8 +84,9 @@ u32 dpcr; // Priority control
 
 u64 idTransferEnd; // Scheduler
 
+void checkInterrupt();
+
 void transferEndEvent(int chnID) {
-    auto &chn  = channels[chnID];
     auto &chcr = channels[chnID].chcr;
 
     std::printf("[DMAC      ] %s transfer end\n", chnNames[chnID]);
@@ -92,7 +94,7 @@ void transferEndEvent(int chnID) {
     chcr.str = false;
 
     /* Set interrupt pending flag, check for interrupts */
-    dicr.ip |= 1 << chnID;
+    if (dicr.im & (1 << chnID)) dicr.ip |= 1 << chnID;
 
     checkInterrupt();
 }
@@ -114,8 +116,38 @@ Channel getChannel(u32 addr) {
     }
 }
 
+/* Handled OTC DMA */
+void doOTC() {
+    const auto chnID = Channel::OTC;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC      ] OTC transfer\n");
+
+    assert(chcr.mod == Mode::Burst); // Always burst?
+    assert(chcr.dec); // Always decrementing?
+    assert(chn.size);
+
+    for (int i = chn.size; i > 0; i--) {
+        u32 data;
+        if (i) { data = chn.madr - 4; } else { data = 0xFFFFFF; }
+
+        bus::write32(chn.madr, data);
+
+        chn.madr -= 4;
+    }
+
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), chn.size, true);
+
+    /* Clear BCR */
+    chn.count = 0;
+    chn.size  = 0;
+}
+
 void startDMA(Channel chn) {
     switch (chn) {
+        case Channel::OTC: doOTC(); break;
         default:
             std::printf("[DMAC      ] Unhandled channel %d (%s) transfer\n", chn, chnNames[static_cast<int>(chn)]);
 
@@ -150,7 +182,7 @@ void checkRunningAll() {
     for (int i = 0; i < 7; i++) {
         const bool cde = dpcr & (1 << (4 * i + 3));
 
-        std::printf("[DMAC:IOP  ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", i, channels[i].drq, i, cde, i, channels[i].chcr.str, i, channels[i].chcr.fst);
+        std::printf("[DMAC      ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", i, channels[i].drq, i, cde, i, channels[i].chcr.str, i, channels[i].chcr.fst);
 
         if ((channels[i].drq || channels[i].chcr.fst) && cde && channels[i].chcr.str) return startDMA(static_cast<Channel>(i));
     }
@@ -161,6 +193,7 @@ void init() {
 
     /* Set initial DRQs */
     channels[static_cast<int>(Channel::MDECIN)].drq = true;
+    channels[static_cast<int>(Channel::GPU   )].drq = true; // Hack
     channels[static_cast<int>(Channel::OTC   )].drq = true;
 
     /* TODO: register scheduler events */
@@ -199,7 +232,7 @@ u32 read(u32 addr) {
     } else {
         switch (addr) {
             case static_cast<u32>(ControlReg::DPCR):
-                std::printf("[DMAC:IOP  ] 32-bit read @ DPCR\n");
+                std::printf("[DMAC      ] 32-bit read @ DPCR\n");
                 return dpcr;
             case static_cast<u32>(ControlReg::DICR):
                 std::printf("[DMAC      ] 32-bit read @ DICR\n");
@@ -265,14 +298,14 @@ void write(u32 addr, u32 data) {
     } else {
         switch (addr) {
             case static_cast<u32>(ControlReg::DPCR):
-                std::printf("[DMAC:IOP  ] 32-bit write @ DPCR = 0x%08X\n", data);
+                std::printf("[DMAC      ] 32-bit write @ DPCR = 0x%08X\n", data);
 
                 dpcr = data;
 
                 checkRunningAll();
                 break;
             case static_cast<u32>(ControlReg::DICR):
-                std::printf("[DMAC:IOP  ] 32-bit write @ DICR = 0x%08X\n", data);
+                std::printf("[DMAC      ] 32-bit write @ DICR = 0x%08X\n", data);
 
                 dicr.fi  = data & (1 << 15);
                 dicr.im  = (data >> 16) & 0x7F;
