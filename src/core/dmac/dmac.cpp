@@ -10,6 +10,7 @@
 #include <cstdio>
 
 #include "../intc.hpp"
+#include "../scheduler.hpp"
 
 namespace ps::dmac {
 
@@ -80,6 +81,22 @@ DICR dicr;
 
 u32 dpcr; // Priority control
 
+u64 idTransferEnd; // Scheduler
+
+void transferEndEvent(int chnID) {
+    auto &chn  = channels[chnID];
+    auto &chcr = channels[chnID].chcr;
+
+    std::printf("[DMAC      ] %s transfer end\n", chnNames[chnID]);
+
+    chcr.str = false;
+
+    /* Set interrupt pending flag, check for interrupts */
+    dicr.ip |= 1 << chnID;
+
+    checkInterrupt();
+}
+
 /* Returns DMA channel from address */
 Channel getChannel(u32 addr) {
     switch ((addr >> 4) & 0xFF) {
@@ -147,7 +164,7 @@ void init() {
     channels[static_cast<int>(Channel::OTC   )].drq = true;
 
     /* TODO: register scheduler events */
-    //idTransferEnd = scheduler::registerEvent([](int chnID, i64) { transferEndEvent(chnID); });
+    idTransferEnd = scheduler::registerEvent([](int chnID, i64) { transferEndEvent(chnID); });
 }
 
 u32 read(u32 addr) {
