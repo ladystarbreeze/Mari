@@ -92,7 +92,7 @@ u16 read16(u32 addr) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u16));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPU), static_cast<u32>(MemorySize::SPU))) {
-        std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X (SPU)\n", addr);
+        //std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X (SPU)\n", addr);
 
         return 0;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
@@ -128,7 +128,7 @@ u32 read32(u32 addr) {
     } else {
         switch (addr) {
             case 0x1F801070:
-                std::printf("[Bus       ] 32-bit read @ I_STAT\n");
+                //std::printf("[Bus       ] 32-bit read @ I_STAT\n");
                 return intc::readStat();
             case 0x1F801074:
                 std::printf("[Bus       ] 32-bit read @ I_MASK\n");
@@ -138,7 +138,7 @@ u32 read32(u32 addr) {
                 return 0;
             case 0x1F801814:
                 std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
-                return 0;
+                return 0x1FF00000;
             default:
                 std::printf("[Bus       ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
