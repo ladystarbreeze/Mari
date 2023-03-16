@@ -9,6 +9,7 @@
 
 #include "../intc.hpp"
 #include "../dmac/dmac.hpp"
+#include "../gpu/gpu.hpp"
 #include "../timer/timer.hpp"
 
 #include "../../common/file.hpp"
@@ -138,7 +139,7 @@ u32 read32(u32 addr) {
                 return 0;
             case 0x1F801814:
                 std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
-                return 0x1FF00000;
+                return 7 << 26;
             default:
                 std::printf("[Bus       ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
@@ -165,6 +166,9 @@ void write8(u32 addr, u8 data) {
         ram[addr] = data;
     } else {
         switch (addr) {
+            case 0x1F801800: case 0x1F801801: case 0x1F801802: case 0x1F801803:
+                std::printf("[Bus       ] Unhandled 8-bit write @ 0x%08X (CD-ROM) = 0x%02X\n", addr, data);
+                break;
             default:
                 std::printf("[Bus       ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
 
@@ -203,6 +207,8 @@ void write32(u32 addr, u32 data) {
         memcpy(&ram[addr], &data, sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMA), static_cast<u32>(MemorySize::DMA))) {
         return dmac::write(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
+        return timer::write(addr, data);
     } else {
         switch (addr) {
             case 0x1F801000:
@@ -252,10 +258,14 @@ void write32(u32 addr, u32 data) {
                 std::printf("[Bus       ] 32-bit write @ I_MASK = 0x%08X\n", data);
                 return intc::writeMask(data);
             case 0x1F801810:
-                std::printf("[Bus       ] Unhandled 32-bit write @ GP0 = 0x%08X\n", data);
+                std::printf("[Bus       ] 32-bit write @ GP0 = 0x%08X\n", data);
+
+                gpu::writeGP0(data);
                 break;
             case 0x1F801814:
-                std::printf("[Bus       ] Unhandled 32-bit write @ GP1 = 0x%08X\n", data);
+                std::printf("[Bus       ] 32-bit write @ GP1 = 0x%08X\n", data);
+
+                gpu::writeGP1(data);
                 break;
             case 0x1FFE0130:
                 std::printf("[Bus       ] 32-bit write @ CACHE_CONTROL = 0x%08X\n", data);
