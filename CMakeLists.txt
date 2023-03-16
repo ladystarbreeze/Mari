@@ -11,6 +11,7 @@ set(SOURCES
     src/common/file.cpp
     src/core/intc.cpp
     src/core/Mari.cpp
+    src/core/scheduler.cpp
     src/core/bus/bus.cpp
     src/core/cpu/cop0.cpp
     src/core/cpu/cpu.cpp
@@ -23,6 +24,7 @@ set(HEADERS
     src/common/types.hpp
     src/core/intc.hpp
     src/core/Mari.hpp
+    src/core/scheduler.hpp
     src/core/bus/bus.hpp
     src/core/cpu/cop0.hpp
     src/core/cpu/cpu.hpp
