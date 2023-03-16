@@ -15,7 +15,7 @@ namespace ps::dmac {
 
 using Interrupt = intc::Interrupt;
 
-const char *chnNames[14] = {
+const char *chnNames[7] = {
     "MDEC_IN", "MDEC_OUT", "GPU", "CDROM", "SPU", "PIO", "OTC",
 };
 
@@ -122,7 +122,7 @@ void checkRunning(Channel chn) {
 
     std::printf("[DMAC      ] Channel %d check\n", chnID);
 
-    const auto cde = dpcr & (1 << (4 * chnID + 3));
+    const bool cde = dpcr & (1 << (4 * chnID + 3));
 
     std::printf("[DMAC      ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", chnID, channels[chnID].drq, chnID, cde, chnID, channels[chnID].chcr.str, chnID, channels[chnID].chcr.fst);
 
