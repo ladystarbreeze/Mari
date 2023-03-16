@@ -192,6 +192,23 @@ void drawTri30() {
     state = GPUState::ReceiveCommand;
 }
 
+/* GP0(0x38) Draw Shaded Quadrilateral (opaque) */
+void drawQuad38() {
+    const auto c0 = cmdParam.front(); cmdParam.pop();
+    const auto v0 = cmdParam.front(); cmdParam.pop();
+    const auto c1 = cmdParam.front(); cmdParam.pop();
+    const auto v1 = cmdParam.front(); cmdParam.pop();
+    const auto c2 = cmdParam.front(); cmdParam.pop();
+    const auto v2 = cmdParam.front(); cmdParam.pop();
+    const auto c3 = cmdParam.front(); cmdParam.pop();
+    const auto v3 = cmdParam.front(); cmdParam.pop();
+
+    drawShadedTri(Vertex(v0, c0), Vertex(v1, c1), Vertex(v2, c2));
+    drawShadedTri(Vertex(v1, c1), Vertex(v2, c2), Vertex(v3, c3));
+
+    state = GPUState::ReceiveCommand;
+}
+
 /* GP0(0xA0) Copy Rectangle (CPU->VRAM) */
 void copyCPUToVRAM() {
     cmdParam.pop();
@@ -243,6 +260,8 @@ void writeGP0(u32 data) {
                         break;
                     case 0x38:
                         std::printf("[GPU:GP0   ] Draw Shaded Quad (opaque)\n");
+
+                        cmdParam.push(data); // Also first argument
 
                         setArgCount(7);
                         break;
@@ -296,6 +315,7 @@ void writeGP0(u32 data) {
                 switch (cmd) {
                     case 0x02: fillRect(); break;
                     case 0x30: drawTri30(); break;
+                    case 0x38: drawQuad38(); break;
                     case 0xA0: copyCPUToVRAM(); break;
                     default:
                         while (cmdParam.size()) cmdParam.pop();
