@@ -24,7 +24,7 @@ enum class MemoryBase {
     SIO   = 0x1F801040, // Serial I/O
     DMA   = 0x1F801080, // DMA controller
     Timer = 0x1F801100,
-    SPU   = 0x1F801D80, // Sound processing unit
+    SPU   = 0x1F801C00, // Sound processing unit
     BIOS  = 0x1FC00000,
 };
 
@@ -35,7 +35,7 @@ enum class MemorySize {
     SIO   = 0x000020,
     DMA   = 0x000080,
     Timer = 0x000030,
-    SPU   = 0x000300,
+    SPU   = 0x000280,
     BIOS  = 0x080000,
 };
 
@@ -91,10 +91,20 @@ u16 read16(u32 addr) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::SPU), static_cast<u32>(MemorySize::SPU))) {
+        std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X (SPU)\n", addr);
+
+        return 0;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u16));
     } else {
         switch (addr) {
+            case 0x1F801070:
+                std::printf("[Bus       ] 16-bit read @ I_STAT\n");
+                return intc::readStat();
+            case 0x1F801074:
+                std::printf("[Bus       ] 16-bit read @ I_MASK\n");
+                return intc::readMask();
             default:
                 std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X\n", addr);
 
@@ -123,6 +133,12 @@ u32 read32(u32 addr) {
             case 0x1F801074:
                 std::printf("[Bus       ] 32-bit read @ I_MASK\n");
                 return intc::readMask();
+            case 0x1F801810:
+                std::printf("[Bus       ] Unhandled 32-bit read @ GP0\n");
+                return 0;
+            case 0x1F801814:
+                std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
+                return 0;
             default:
                 std::printf("[Bus       ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
@@ -164,9 +180,15 @@ void write16(u32 addr, u16 data) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
         return timer::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPU), static_cast<u32>(MemorySize::SPU))) {
-        std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X (SPU) = 0x%04X\n", addr, data);
+        //std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X (SPU) = 0x%04X\n", addr, data);
     } else {
         switch (addr) {
+            case 0x1F801070:
+                std::printf("[Bus       ] 16-bit write @ I_STAT = 0x%04X\n", data);
+                return intc::writeStat(data);
+            case 0x1F801074:
+                std::printf("[Bus       ] 16-bit write @ I_MASK = 0x%04X\n", data);
+                return intc::writeMask(data);
             default:
                 std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
 
@@ -229,6 +251,12 @@ void write32(u32 addr, u32 data) {
             case 0x1F801074:
                 std::printf("[Bus       ] 32-bit write @ I_MASK = 0x%08X\n", data);
                 return intc::writeMask(data);
+            case 0x1F801810:
+                std::printf("[Bus       ] Unhandled 32-bit write @ GP0 = 0x%08X\n", data);
+                break;
+            case 0x1F801814:
+                std::printf("[Bus       ] Unhandled 32-bit write @ GP1 = 0x%08X\n", data);
+                break;
             case 0x1FFE0130:
                 std::printf("[Bus       ] 32-bit write @ CACHE_CONTROL = 0x%08X\n", data);
                 break;
