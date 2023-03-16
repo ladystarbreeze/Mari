@@ -21,7 +21,7 @@ using Exception = cop0::Exception;
 
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
-constexpr auto doDisasm = true;
+constexpr auto doDisasm = false;
 
 /* --- CPU register definitions --- */
 
@@ -1357,6 +1357,21 @@ void step(i64 c) {
         // Advance delay slot helper
         inDelaySlot[0] = inDelaySlot[1];
         inDelaySlot[1] = false;
+
+        /* Hook into BIOS functions */
+        if ((cpc == 0xA0) || (cpc == 0xB0) || (cpc == 0xC0)) {
+            /* Get BIOS function */
+            const auto funct = regs[CPUReg::T1];
+
+            if ((cpc == 0xA0) && (funct == 0x40)) {
+                std::printf("[CPU        ] SystemErrorUnresolvedException()\n"); // Bad.
+
+                exit(0);
+            } else if ((cpc == 0xB0) && (funct == 0x3D)) {
+                /* putc */
+                std::printf("%c", (char)regs[CPUReg::A0]);
+            }
+        }
 
         decodeInstr(fetchInstr());
     }
