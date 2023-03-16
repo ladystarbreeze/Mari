@@ -12,6 +12,7 @@
 #include "../intc.hpp"
 #include "../scheduler.hpp"
 #include "../bus/bus.hpp"
+#include "../gpu/gpu.hpp"
 
 namespace ps::dmac {
 
@@ -116,7 +117,67 @@ Channel getChannel(u32 addr) {
     }
 }
 
-/* Handled OTC DMA */
+/* Handles GPU DMA */
+void doGPU() {
+    const auto chnID = Channel::GPU;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC      ] GPU transfer\n");
+
+    assert(chcr.dir);
+    assert((chcr.mod == Mode::Slice) || (chcr.mod == Mode::LinkedList));
+    assert(!chcr.dec); // Always incrementing?
+
+    i64 len = 0;
+
+    if (chcr.mod == Mode::Slice) {
+        assert(chn.len);
+
+        len += chn.len;
+
+        for (int i = 0; i < len; i++) {
+            gpu::writeGP0(bus::read32(chn.madr));
+
+            chn.madr += 4;
+        }
+    } else {
+        /* Linked list DMA */
+        while (true) {
+            /* Get header */
+            const auto header = bus::read32(chn.madr);
+
+            chn.madr += 4;
+
+            const auto size = (int)(header >> 24);
+
+            len += size;
+
+            /* Transfer size words */
+            for (int i = 0; i < size; i++) {
+                gpu::writeGP0(bus::read32(chn.madr));
+            
+                chn.madr += 4;
+            }
+
+            if (header & (1 << 23)) break; // We're done
+
+            chn.madr = header & 0x1FFFFC;
+        }
+    }
+
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), len, true);
+
+    /* Clear DMA request */
+    //chn.drq = false;
+
+    /* Clear BCR */
+    chn.count = 0;
+    chn.size  = 0;
+}
+
+/* Handles OTC DMA */
 void doOTC() {
     const auto chnID = Channel::OTC;
 
@@ -125,13 +186,14 @@ void doOTC() {
 
     std::printf("[DMAC      ] OTC transfer\n");
 
+    assert(!chcr.dir); // Always to RAM
     assert(chcr.mod == Mode::Burst); // Always burst?
     assert(chcr.dec); // Always decrementing?
     assert(chn.size);
 
     for (int i = chn.size; i > 0; i--) {
         u32 data;
-        if (i) { data = chn.madr - 4; } else { data = 0xFFFFFF; }
+        if (i != 1) { data = chn.madr - 4; } else { data = 0xFFFFFF; }
 
         bus::write32(chn.madr, data);
 
@@ -147,6 +209,7 @@ void doOTC() {
 
 void startDMA(Channel chn) {
     switch (chn) {
+        case Channel::GPU: doGPU(); break;
         case Channel::OTC: doOTC(); break;
         default:
             std::printf("[DMAC      ] Unhandled channel %d (%s) transfer\n", chn, chnNames[static_cast<int>(chn)]);
