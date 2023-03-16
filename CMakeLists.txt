@@ -16,6 +16,7 @@ set(SOURCES
     src/core/cpu/cop0.cpp
     src/core/cpu/cpu.cpp
     src/core/dmac/dmac.cpp
+    src/core/gpu/gpu.cpp
     src/core/timer/timer.cpp
 )
 
@@ -29,6 +30,7 @@ set(HEADERS
     src/core/cpu/cop0.hpp
     src/core/cpu/cpu.hpp
     src/core/dmac/dmac.hpp
+    src/core/gpu/gpu.hpp
     src/core/timer/timer.hpp
 )
 
