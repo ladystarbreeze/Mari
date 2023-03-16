@@ -90,6 +90,11 @@ void writeGP0(u32 data) {
 
                         setArgCount(2);
                         break;
+                    case 0x2C:
+                        std::printf("[GPU:GP0   ] Draw Textured Quad (semi-transparent, blended)\n");
+
+                        setArgCount(8);
+                        break;
                     case 0x30:
                         std::printf("[GPU:GP0   ] Draw Shaded Tri (opaque)\n");
 
