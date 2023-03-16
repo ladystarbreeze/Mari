@@ -4,7 +4,7 @@ project(Mari CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_compile_options(-Wall -Wextra)
+add_compile_options(-O3 -Wall -Wextra)
 
 set(SOURCES
     src/main.cpp
@@ -34,4 +34,8 @@ set(HEADERS
     src/core/timer/timer.hpp
 )
 
+find_package(SDL2 REQUIRED)
+include_directories(Mari ${SDL2_INCLUDE_DIRS})
+
 add_executable(Mari ${SOURCES} ${HEADERS})
+target_link_libraries(Mari ${SDL2_LIBRARIES})
