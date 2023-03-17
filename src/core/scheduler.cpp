@@ -61,6 +61,19 @@ void addEvent(u64 id, int param, i64 cyclesUntilEvent, bool doReschedule) {
     if (doReschedule) reschedule();
 }
 
+/* Removes all scheduler events of a certain ID */
+void removeEvent(u64 id) {
+    for (auto event = events.begin(); event != events.end();) {
+        if (event->id == id) {
+            event = events.erase(event);
+        } else {
+            event++;
+        }
+    }
+
+    reschedule();
+}
+
 void processEvents(i64 elapsedCycles) {
     if (events.empty()) return;
 
