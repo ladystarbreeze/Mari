@@ -54,7 +54,7 @@ void init(const char *biosPath, const char *isoPath) {
     scheduler::init();
 
     bus::init(biosPath);
-    cdrom::init();
+    cdrom::init(isoPath);
     cpu::init();
     dmac::init();
     gpu::init();

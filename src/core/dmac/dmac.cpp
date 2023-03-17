@@ -12,6 +12,7 @@
 #include "../intc.hpp"
 #include "../scheduler.hpp"
 #include "../bus/bus.hpp"
+#include "../cdrom/cdrom.hpp"
 #include "../gpu/gpu.hpp"
 
 namespace ps::dmac {
@@ -117,6 +118,34 @@ Channel getChannel(u32 addr) {
     }
 }
 
+/* Handles CDROM DMA */
+void doCDROM() {
+    const auto chnID = Channel::CDROM;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC      ] CDROM transfer\n");
+
+    assert(!chcr.dir); // Always to RAM
+    assert(chcr.mod == Mode::Burst); // Always burst?
+    assert(!chcr.dec); // Always incrementing?
+    assert(chn.len);
+
+    for (int i = chn.len; i > 0; i--) {
+        bus::write32(chn.madr, cdrom::getData32());
+
+        chn.madr += 4;
+    }
+
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 24 * chn.len, true);
+
+    /* Clear BCR */
+    chn.count = 0;
+    chn.size  = 0;
+    chn.len   = 0;
+}
+
 /* Handles GPU DMA */
 void doGPU() {
     const auto chnID = Channel::GPU;
@@ -209,8 +238,9 @@ void doOTC() {
 
 void startDMA(Channel chn) {
     switch (chn) {
-        case Channel::GPU: doGPU(); break;
-        case Channel::OTC: doOTC(); break;
+        case Channel::GPU  : doGPU(); break;
+        case Channel::CDROM: doCDROM(); break;
+        case Channel::OTC  : doOTC(); break;
         default:
             std::printf("[DMAC      ] Unhandled channel %d (%s) transfer\n", chn, chnNames[static_cast<int>(chn)]);
 
@@ -276,7 +306,7 @@ u32 read(u32 addr) {
                 {
                     auto &chcr = chn.chcr;
 
-                    std::printf("[DMAC      ] 32-bit read @ D%d_CHCR\n", chnID);
+                    //std::printf("[DMAC      ] 32-bit read @ D%d_CHCR\n", chnID);
 
                     data  = chcr.dir;
                     data |= chcr.dec << 1;

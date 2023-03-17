@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <fstream>
 #include <queue>
 
 #include "../intc.hpp"
@@ -16,11 +17,16 @@ namespace ps::cdrom {
 
 using Interrupt = intc::Interrupt;
 
-/* CDROM  commands */
+/* --- CDROM constants --- */
+
+constexpr int SECTOR_SIZE = 2352;
+
+/* CDROM commands */
 enum Command {
     GetStat = 0x01,
     SetLoc  = 0x02,
     ReadN   = 0x06,
+    Pause   = 0x09,
     Init    = 0x0A,
     SetMode = 0x0E,
     SeekL   = 0x15,
@@ -56,6 +62,8 @@ enum class Status {
     Play      = 1 << 7,
 };
 
+std::ifstream file;
+
 u8 mode, stat;
 u8 iEnable, iFlags; // Interrupt registers
 
@@ -67,7 +75,18 @@ std::queue<u8> paramFIFO, responseFIFO;
 
 SeekParam seekParam;
 
+u8 readBuf[SECTOR_SIZE];
+int readIdx;
+
 u64 idSendIRQ; // Scheduler
+
+void readSector();
+
+/* BCD to char conversion */
+inline u8 toChar(u8 bcd)
+{
+	return (bcd / 16) * 10 + (bcd % 16);
+}
 
 void sendIRQEvent(int irq) {
     std::printf("[CDROM     ] INT%d\n", irq);
@@ -75,6 +94,47 @@ void sendIRQEvent(int irq) {
     iFlags |= (u8)irq;
 
     if (iEnable & iFlags) intc::sendInterrupt(Interrupt::CDROM);
+
+    /* If this is an INT1, read sector and send new INT1 */
+    if (irq == 1) {
+        readSector();
+
+        scheduler::addEvent(idSendIRQ, 1, 250000 + 250000 * !(mode & static_cast<u8>(Mode::Speed)), false);
+    }
+}
+
+void readSector() {
+    auto &s = seekParam;
+
+    /* Calculate seek target (in sectors) */
+    const auto mm   = toChar(s.mins) * 60 * 75; // 1min = 60sec
+    const auto ss   = toChar(s.secs) * 75; // 1min = 75 sectors
+    const auto sect = toChar(s.sector);
+
+    const auto seekTarget = mm + ss + sect - 150; // Starts at 2s, subtract 150 sectors to get start
+
+    std::printf("[CDROM     ] Seeking to [%02X:%02X:%02X] = %d\n", s.mins, s.secs, s.sector, seekTarget);
+
+    file.seekg(seekTarget * SECTOR_SIZE, std::ios_base::beg);
+
+    file.read((char *)readBuf, SECTOR_SIZE);
+
+    readIdx = (mode & static_cast<u8>(Mode::FullSector)) ? 12 : 24;
+
+    s.sector++;
+
+    /* Increment BCD values */
+    if ((s.sector & 0xF) == 10) { s.sector += 10; s.sector &= 0xF0; }
+
+    if (s.sector == 0x75) { s.secs++; s.sector = 0; }
+
+    if ((s.secs & 0xF) == 10) { s.secs += 10; s.secs &= 0xF0; }
+
+    if (s.secs == 0x60) { s.mins++; s.secs = 0; }
+
+    if ((s.mins & 0xF) == 10) { s.mins += 10; s.mins &= 0xF0; }
+
+    std::printf("[CDROM     ] Next seek to [%02X:%02X:%02X]\n", s.mins, s.secs, s.sector);
 }
 
 /* Get ID - Activate motor, set mode = 0x20, abort all commands */
@@ -135,6 +195,28 @@ void cmdInit() {
 
     // Send INT2
     scheduler::addEvent(idSendIRQ, 2, 110000, true);
+}
+
+/* Pause */
+void cmdPause() {
+    std::printf("[CDROM     ] Pause\n");
+
+    scheduler::removeEvent(idSendIRQ); // Kill all pending CDROM events
+
+    // Send status
+    responseFIFO.push(stat);
+
+    // Send INT3
+    scheduler::addEvent(idSendIRQ, 3, 20000, false);
+
+    stat &= ~static_cast<u8>(Status::Play);
+    stat &= ~static_cast<u8>(Status::Read);
+
+    // Send status
+    responseFIFO.push(stat);
+
+    // Send INT2
+    scheduler::addEvent(idSendIRQ, 2, 120000, true);
 }
 
 /* ReadN - Read sector */
@@ -212,6 +294,7 @@ void doCmd(u8 data) {
         case Command::GetStat: cmdGetStat(); break;
         case Command::SetLoc : cmdSetLoc(); break;
         case Command::ReadN  : cmdReadN(); break;
+        case Command::Pause  : cmdPause(); break;
         case Command::Init   : cmdInit(); break;
         case Command::SetMode: cmdSetMode(); break;
         case Command::SeekL  : cmdSeekL(); break;
@@ -223,7 +306,18 @@ void doCmd(u8 data) {
     }
 }
 
-void init() {
+void init(const char *isoPath) {
+    // Open file
+    file.open(isoPath, std::ios::in | std::ios::binary);
+
+    if (!file.is_open()) {
+        std::printf("[CDROM     ] Unable to open file \"%s\"\n", isoPath);
+
+        exit(0);
+    }
+
+    file.unsetf(std::ios::skipws);
+
     /* Register scheduler events */
     idSendIRQ = scheduler::registerEvent([](int irq, i64) { sendIRQEvent(irq); });
 }
@@ -332,6 +426,18 @@ void write(u32 addr, u8 data) {
 
             exit(0);
     }
+}
+
+u32 getData32() {
+    assert(readIdx < SECTOR_SIZE);
+
+    u32 data;
+
+    std::memcpy(&data, &readBuf[readIdx], 4);
+
+    readIdx += 4;
+
+    return data;
 }
 
 }

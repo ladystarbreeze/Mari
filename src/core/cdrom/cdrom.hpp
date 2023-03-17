@@ -9,10 +9,12 @@
 
 namespace ps::cdrom {
 
-void init();
+void init(const char *isoPath);
 
 u8 read(u32 addr);
 
 void write(u32 addr, u8 data);
+
+u32 getData32();
 
 }
