@@ -14,6 +14,7 @@
 #include "../intc.hpp"
 #include "../Mari.hpp"
 #include "../scheduler.hpp"
+#include "../timer/timer.hpp"
 
 namespace ps::gpu {
 
@@ -21,6 +22,7 @@ using Interrupt = intc::Interrupt;
 
 /* --- GPU constants --- */
 
+constexpr i64 CYCLES_PER_HDRAW    = 2560;
 constexpr i64 CYCLES_PER_SCANLINE = 3413; // NTSC
 constexpr i64 SCANLINES_PER_VDRAW = 240;
 constexpr i64 SCANLINES_PER_FRAME = 262;
@@ -80,7 +82,14 @@ CopyInfo dstCopyInfo, srcCopyInfo;
 
 i64 lineCounter = 0;
 
-u64 idScanline; // Scheduler
+u64 idHBLANK, idScanline; // Scheduler
+
+/* Handles HBLANK events */
+void hblankEvent(i64 c) {
+    timer::stepHBLANK();
+
+    scheduler::addEvent(idHBLANK, 0, CYCLES_PER_SCANLINE + c, false);
+}
 
 /* Handles scanline events */
 void scanlineEvent(i64 c) {
@@ -420,10 +429,12 @@ void copyVRAMToCPU() {
 }
 
 void init() {
+    idHBLANK   = scheduler::registerEvent([](int, i64 c) { hblankEvent(c); });
     idScanline = scheduler::registerEvent([](int, i64 c) { scanlineEvent(c); });
 
     vram.resize(VRAM_WIDTH * VRAM_HEIGHT);
 
+    scheduler::addEvent(idHBLANK, 0, CYCLES_PER_HDRAW, false);
     scheduler::addEvent(idScanline, 0, CYCLES_PER_SCANLINE, true);
 }
 

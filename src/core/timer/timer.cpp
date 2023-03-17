@@ -166,7 +166,9 @@ void write(u32 addr, u16 data) {
                 }
 
                 if (mode.clks) {
-                    if (chn == 2) {
+                    if (chn == 1) {
+                        
+                    } else if (chn == 2) {
                         timer.prescaler = 1 + 7 * (u16)(mode.clks > 1);
                     } else {
                         std::printf("[Timer     ] Unhandled clock source\n");
@@ -231,6 +233,38 @@ void step(i64 c) {
             timer.subcount -= timer.prescaler;
         }
     }
+}
+
+/* Steps HBLANK timer */
+void stepHBLANK() {
+    auto &timer = timers[1];
+
+    /* Not in HBLANK mode */
+    if (!(timer.mode.clks & 1)) return;
+
+    timer.count++;
+
+    if (timer.count & (1 << 16)) {
+        if (timer.mode.ovfe && !timer.mode.ovff) {
+            // Checking OVFF is necessary because timer IRQs are edge-triggered
+            timer.mode.ovff = true;
+
+            sendInterrupt(1);
+        }
+    }
+
+    if (timer.count == timer.comp) {
+        if (timer.mode.cmpe && !timer.mode.equf) {
+            // Checking EQUF is necessary because timer IRQs are edge-triggered
+            timer.mode.equf = true;
+
+            sendInterrupt(1);
+        }
+
+        if (timer.mode.zret) timer.count = 0;
+    }
+
+    timer.count &= 0xFFFF;
 }
 
 }
