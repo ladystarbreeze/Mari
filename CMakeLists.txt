@@ -4,7 +4,7 @@ project(Mari CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_compile_options(-O3 -Wall -Wextra)
+add_compile_options(-O1 -Wall -Wextra)
 
 set(SOURCES
     src/main.cpp
@@ -13,6 +13,7 @@ set(SOURCES
     src/core/Mari.cpp
     src/core/scheduler.cpp
     src/core/bus/bus.cpp
+    src/core/cdrom/cdrom.cpp
     src/core/cpu/cop0.cpp
     src/core/cpu/cpu.cpp
     src/core/dmac/dmac.cpp
@@ -27,6 +28,7 @@ set(HEADERS
     src/core/Mari.hpp
     src/core/scheduler.hpp
     src/core/bus/bus.hpp
+    src/core/cdrom/cdrom.hpp
     src/core/cpu/cop0.hpp
     src/core/cpu/cpu.hpp
     src/core/dmac/dmac.hpp
