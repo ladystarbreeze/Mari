@@ -12,6 +12,7 @@
 
 #include "scheduler.hpp"
 #include "bus/bus.hpp"
+#include "cdrom/cdrom.hpp"
 #include "cpu/cpu.hpp"
 #include "dmac/dmac.hpp"
 #include "gpu/gpu.hpp"
@@ -53,6 +54,7 @@ void init(const char *biosPath, const char *isoPath) {
     scheduler::init();
 
     bus::init(biosPath);
+    cdrom::init();
     cpu::init();
     dmac::init();
     gpu::init();
