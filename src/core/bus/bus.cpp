@@ -136,7 +136,7 @@ u32 read32(u32 addr) {
                 return intc::readMask();
             case 0x1F801810:
                 std::printf("[Bus       ] Unhandled 32-bit read @ GP0\n");
-                return 0;
+                return gpu::readGPUREAD();
             case 0x1F801814:
                 std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
                 return 7 << 26;
