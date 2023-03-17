@@ -8,6 +8,7 @@
 #include <cstdio>
 
 #include "../intc.hpp"
+#include "../cdrom/cdrom.hpp"
 #include "../dmac/dmac.hpp"
 #include "../gpu/gpu.hpp"
 #include "../timer/timer.hpp"
@@ -78,6 +79,8 @@ u8 read8(u32 addr) {
         return bios[addr - static_cast<u32>(MemoryBase::BIOS)];
     } else {
         switch (addr) {
+            case 0x1F801800: case 0x1F801801: case 0x1F801802: case 0x1F801803:
+                return cdrom::read(addr);
             default:
                 std::printf("[Bus       ] Unhandled 8-bit read @ 0x%08X\n", addr);
 
@@ -167,8 +170,7 @@ void write8(u32 addr, u8 data) {
     } else {
         switch (addr) {
             case 0x1F801800: case 0x1F801801: case 0x1F801802: case 0x1F801803:
-                std::printf("[Bus       ] Unhandled 8-bit write @ 0x%08X (CD-ROM) = 0x%02X\n", addr, data);
-                break;
+                return cdrom::write(addr, data);
             default:
                 std::printf("[Bus       ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
 
