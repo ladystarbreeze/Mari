@@ -148,14 +148,14 @@ void cmdGetID() {
     scheduler::addEvent(idSendIRQ, 3, 30000, false);
 
     /* Licensed, Mode2 */
-    responseFIFO.push(stat & ~(1 << 3));
+    responseFIFO.push(0x02);
     responseFIFO.push(0x00);
     responseFIFO.push(0x20);
     responseFIFO.push(0x00);
 
-    responseFIFO.push('M');
-    responseFIFO.push('A');
-    responseFIFO.push('R');
+    responseFIFO.push(0x53);
+    responseFIFO.push(0x43);
+    responseFIFO.push(0x45);
     responseFIFO.push('I');
 
     // Send INT2
