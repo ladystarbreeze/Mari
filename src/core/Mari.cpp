@@ -32,7 +32,10 @@ constexpr i64 RUN_CYCLES = 64;
 SDL_Renderer *renderer;
 SDL_Window *window;
 SDL_Texture *texture;
-SDL_Event *e;
+
+SDL_Event e;
+
+bool isRunning = true;
 
 /* Initializes SDL */
 void initSDL() {
@@ -64,17 +67,24 @@ void init(const char *biosPath, const char *isoPath) {
 }
 
 void run() {
-    while (true) {
+    while (isRunning) {
         cpu::step(RUN_CYCLES >> 1); // 2 cycles per instruction
 
         timer::step(RUN_CYCLES);
 
         scheduler::processEvents(RUN_CYCLES);
     }
+
+    SDL_Quit();
 }
 
 void update(const u8 *fb) {
-    SDL_PollEvent(e); // Change this when we implement controllers
+    SDL_PollEvent(&e);
+
+    switch (e.type) {
+        case SDL_QUIT: isRunning = false; break;
+        default: break;
+    }
 
     SDL_UpdateTexture(texture, nullptr, fb, 2 * 1024);
     SDL_RenderCopy(renderer, texture, nullptr, nullptr);
