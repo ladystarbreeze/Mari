@@ -125,6 +125,50 @@ i32 edgeFunction(const Vertex &a, const Vertex &b, const Vertex &c) {
 	return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
+u16 fetchTex(i32 texX, i32 texY, u32 texPage, u32 clut) {
+    static const u32 texDepth[4] = { 4, 8, 16, 0 };
+
+    /* Get tex page coordinates */
+    const auto texPageX = texPage & 0xF;
+    const auto texPageY = 256 * ((texPage >> 4) & 1);
+
+    const auto depth = texDepth[(texPage >> 7) & 3];
+
+    assert((depth == 4) || (depth == 16));
+
+    u32 x = 0;
+
+    switch (depth) {
+        case 4: case 8:
+            x = 64 * texPageX + (texX / depth);
+            break;
+        case 16:
+            x = 64 * texPageX + texX;
+            break;
+        default:
+            break;
+    }
+
+    const auto y = texPageY + texY;
+
+    const auto texel = vram[x + 1024 * y];
+
+    switch (depth) {
+        case 4:
+            {
+                const auto clutX = 16 * (clut & 0x3F);
+                const auto clutY = (clut >> 6) & 0x1FF;
+                const auto clutOfs = (texel >> (4 * (texX & 3))) & 0xF;
+
+                return vram[(clutX + clutOfs) + 1024 * clutY];
+            }
+            break;
+        case 16: return texel;
+        default:
+            assert(false); // Shouldn't happen
+    }
+}
+
 /* Draws a Gouraud shaded triangle */
 void drawShadedTri(const Vertex &v0, const Vertex &v1, const Vertex &v2) {
     Vertex p, a, b, c;
@@ -185,8 +229,6 @@ void drawShadedTri(const Vertex &v0, const Vertex &v1, const Vertex &v2) {
 
 /* Draws a textured triangle */
 void drawTexturedTri(const Vertex &v0, const Vertex &v1, const Vertex &v2, u32 clut, u32 texPage) {
-    static const u32 texDepth[4] = { 4, 8, 16, 0 };
-
     Vertex p, a, b, c;
 
     a = v0;
@@ -234,46 +276,7 @@ void drawTexturedTri(const Vertex &v0, const Vertex &v1, const Vertex &v2, u32 c
                 const u32 texX = (w0 * ((a.tex >>  0) & 0xFF) + w1 * ((b.tex >>  0) & 0xFF) + w2 * ((c.tex >>  0) & 0xFF)) / area;
                 const u32 texY = (w0 * ((a.tex >>  8) & 0xFF) + w1 * ((b.tex >>  8) & 0xFF) + w2 * ((c.tex >>  8) & 0xFF)) / area;
 
-                const auto texPageX = texPage & 0xF;
-                const auto texPageY = 256 * ((texPage >> 4) & 1);
-
-                const auto depth = texDepth[(texPage >> 7) & 3];
-
-                u32 x = 0;
-
-                switch (depth) {
-                    case 4: case 8:
-                        x = 64 * texPageX + (texX / depth);
-                        break;
-                    case 16:
-                        x = 64 * texPageX + texX;
-                        break;
-                    default:
-                        break;
-                }
-
-                const auto y = texPageY + texY;
-
-                const auto texel = vram[x + 1024 * y];
-
-                auto color = texel;
-
-                switch (depth) {
-                    case 4:
-                        {
-                            const auto clutX = 16 * (clut & 0x3F);
-                            const auto clutY = (clut >> 6) & 0x1FF;
-                            const auto clutOfs = (texel >> (4 * (texX & 3))) & 0xF;
-
-                            color = vram[(clutX + clutOfs) + 1024 * clutY];
-                        }
-                        break;
-                    case 8: case 0:
-                        color = 0xFFFF;
-                        break;
-                    default:
-                        break;
-                }
+                const auto color = fetchTex(texX, texY, texPage, clut);
 
                 /* TODO: handle semi-transparency/blending */
                 if (!color) continue;
