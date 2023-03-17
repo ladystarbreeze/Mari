@@ -558,9 +558,9 @@ void writeGP0(u32 data) {
             break;
         case GPUState::CopyRectangle:
             {
-                std::printf("[GPU:GP0   ] CPU->VRAM write = 0x%08X\n", data);
-
                 auto &c = dstCopyInfo;
+
+                std::printf("[GPU:GP0   ] [0x%08X] = 0x%04X\n", c.cx + 1024 * c.cy, data & 0xFFFF);
 
                 vram[c.cx + 1024 * c.cy] = data;
 
@@ -571,6 +571,8 @@ void writeGP0(u32 data) {
 
                     c.cx = c.xMin;
                 }
+
+                std::printf("[GPU:GP0   ] [0x%08X] = 0x%04X\n", c.cx + 1024 * c.cy, data >> 16);
 
                 vram[c.cx + 1024 * c.cy] = data >> 16;
 
