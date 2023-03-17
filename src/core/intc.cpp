@@ -45,7 +45,7 @@ u16 readStat() {
 void writeMask(u16 data) {
     iMASK = (data & 0x7FF);
 
-    assert(!(iMASK & 0x7F6));
+    assert(!(iMASK & 0x7F2));
 
     checkInterrupt();
 }
