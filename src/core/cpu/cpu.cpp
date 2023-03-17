@@ -65,6 +65,7 @@ enum Opcode {
     XORI    = 0x0E,
     LUI     = 0x0F,
     COP0    = 0x10,
+    COP2    = 0x12,
     LB      = 0x20,
     LH      = 0x21,
     LWL     = 0x22,
@@ -1319,6 +1320,8 @@ void decodeInstr(u32 instr) {
                 }
             }
             break;
+        case Opcode::COP2:
+            break;
         case Opcode::LB : iLB(instr); break;
         case Opcode::LH : iLH(instr); break;
         case Opcode::LWL: iLWL(instr); break;
@@ -1331,6 +1334,7 @@ void decodeInstr(u32 instr) {
         case Opcode::SWL: iSWL(instr); break;
         case Opcode::SW : iSW(instr); break;
         case Opcode::SWR: iSWR(instr); break;
+        case 0x32: case 0x3A: break;
         default:
             std::printf("[CPU       ] Unhandled instruction 0x%02X (0x%08X) @ 0x%08X\n", opcode, instr, cpc);
 
