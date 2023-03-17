@@ -12,4 +12,6 @@ void init();
 void writeGP0(u32 data);
 void writeGP1(u32 data);
 
+u32 readGPUREAD();
+
 }
