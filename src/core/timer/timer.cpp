@@ -48,6 +48,8 @@ struct Timer {
     // Prescaler
     u16 subcount;
     u16 prescaler;
+
+    bool isPaused;
 };
 
 Timer timers[3];
@@ -95,7 +97,7 @@ u16 read(u32 addr) {
 
     switch ((addr & ~0xFF0) | (1 << 8)) {
         case TimerReg::COUNT:
-            std::printf("[Timer     ] 16-bit read @ T%d_COUNT\n", chn);
+            //std::printf("[Timer     ] 16-bit read @ T%d_COUNT\n", chn);
             return timer.count;
         case TimerReg::MODE:
             {
@@ -159,10 +161,36 @@ void write(u32 addr, u16 data) {
 
                 mode.intf = true; // Always reset to 1
 
-                if (mode.gate) {
-                    std::printf("[Timer     ] Unhandled timer gate\n");
+                timer.isPaused = false;
 
-                    exit(0);
+                if (mode.gate) {
+                    switch (chn) {
+                        case 0: // HBLANK gate
+                            std::printf("[Timer     ] Unhandled timer 0 gate\n");
+
+                            exit(0);
+                        case 1: // VBLANK gate
+                            switch (mode.gats) {
+                                case 0: break; // Pause during VBLANK
+                                case 1: break; // Reset counter at VBLANK start
+                                case 2: // Reset counter at VBLANK start, pause outside of VBLANK
+                                    timer.isPaused = true;
+                                    break;
+                                case 3: // Pause ONCE until VBLANK start
+                                    timer.isPaused = true;
+                                    break;
+                            }
+                            break;
+                        case 2:
+                            switch (mode.gats) {
+                                case 0: case 3: // Pause forever
+                                    timer.isPaused = true;
+                                    break;
+                                case 1: case 2: // Nothing
+                                    break;
+                            }
+                            break;
+                    }
                 }
 
                 if (mode.clks) {
@@ -203,6 +231,8 @@ void step(i64 c) {
         /* Timers 0 and 1 have a different clock source if CLKS is odd */
         if ((timer.mode.clks & 1) && ((i == 0) || (i == 1))) continue;
 
+        if (timer.isPaused) continue;
+
         timer.subcount += c;
 
         while (timer.subcount > timer.prescaler) {
@@ -242,6 +272,8 @@ void stepHBLANK() {
     /* Not in HBLANK mode */
     if (!(timer.mode.clks & 1)) return;
 
+    if (timer.isPaused) return;
+
     timer.count++;
 
     if (timer.count & (1 << 16)) {
@@ -265,6 +297,52 @@ void stepHBLANK() {
     }
 
     timer.count &= 0xFFFF;
+}
+
+/* Handle VBLANK start gate events */
+void gateVBLANKStart() {
+    auto &timer = timers[1];
+
+    auto &mode = timer.mode;
+
+    if (!mode.gate) return;
+
+    switch (mode.gats) {
+        case 0: // Pause during VBLANK
+            timer.isPaused = true;
+            break;
+        case 1: // Reset counter at VBLANK start
+            timer.count = 0;
+            break;
+        case 2: // Reset counter at VBLANK start, pause outside of VBLANK
+            timer.count = 0;
+
+            timer.isPaused = false;
+            break;
+        case 3: // Pause ONCE until VBLANK start
+            timer.isPaused = false;
+            break;
+    }
+}
+
+/* Handle VBLANK end gate events */
+void gateVBLANKEnd() {
+    auto &timer = timers[1];
+
+    auto &mode = timer.mode;
+
+    if (!mode.gate) return;
+
+    switch (mode.gats) {
+        case 0: // Pause during VBLANK
+            timer.isPaused = false;
+            break;
+        case 1: break; // Reset counter at VBLANK start
+        case 2: // Reset counter at VBLANK start, pause outside of VBLANK
+            timer.isPaused = true;
+            break;
+        case 3: break; // Pause ONCE until VBLANK start
+    }
 }
 
 }

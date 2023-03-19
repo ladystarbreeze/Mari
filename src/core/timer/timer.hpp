@@ -18,4 +18,7 @@ void write(u32 addr, u16 data);
 void step(i64 c);
 void stepHBLANK();
 
+void gateVBLANKStart();
+void gateVBLANKEnd();
+
 }
