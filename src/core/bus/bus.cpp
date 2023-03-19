@@ -45,6 +45,8 @@ enum class MemorySize {
 std::vector<u8> ram;
 std::vector<u8> bios;
 
+u8 spram[static_cast<size_t>(MemorySize::SPRAM)];
+
 /* Expansion region bases/sizes */
 u32 exp1Base = 0x1F000000, exp1Size;
 u32 exp2Base = 0x1F000000, exp2Size;
@@ -104,10 +106,10 @@ u16 read16(u32 addr) {
     } else {
         switch (addr) {
             case 0x1F801070:
-                std::printf("[Bus       ] 16-bit read @ I_STAT\n");
+                //std::printf("[Bus       ] 16-bit read @ I_STAT\n");
                 return intc::readStat();
             case 0x1F801074:
-                std::printf("[Bus       ] 16-bit read @ I_MASK\n");
+                //std::printf("[Bus       ] 16-bit read @ I_MASK\n");
                 return intc::readMask();
             default:
                 std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X\n", addr);
@@ -119,6 +121,8 @@ u16 read16(u32 addr) {
     return data;
 }
 
+u32 gpustat = 7 << 26;
+
 /* Reads a word from the system bus */
 u32 read32(u32 addr) {
     u32 data;
@@ -127,6 +131,8 @@ u32 read32(u32 addr) {
         std::memcpy(&data, &ram[addr], sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMA), static_cast<u32>(MemorySize::DMA))) {
         return dmac::read(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
+        return timer::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
     } else {
@@ -138,14 +144,15 @@ u32 read32(u32 addr) {
                 //std::printf("[Bus       ] 32-bit read @ I_STAT\n");
                 return intc::readStat();
             case 0x1F801074:
-                std::printf("[Bus       ] 32-bit read @ I_MASK\n");
+                //std::printf("[Bus       ] 32-bit read @ I_MASK\n");
                 return intc::readMask();
             case 0x1F801810:
                 std::printf("[Bus       ] 32-bit read @ GPUREAD\n");
                 return gpu::readGPUREAD();
             case 0x1F801814:
-                std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
-                return 7 << 26;
+                //std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
+                gpustat ^= 1 << 31;
+                return gpustat;
             default:
                 std::printf("[Bus       ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
@@ -170,7 +177,9 @@ void write8(u32 addr, u8 data) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         ram[addr] = data;
-    } else {
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::SPRAM), static_cast<u32>(MemorySize::SPRAM))) {
+        spram[addr & 0x3FF]  = data;
+    }  else {
         switch (addr) {
             case 0x1F801800: case 0x1F801801: case 0x1F801802: case 0x1F801803:
                 return cdrom::write(addr, data);
@@ -193,10 +202,10 @@ void write16(u32 addr, u16 data) {
     } else {
         switch (addr) {
             case 0x1F801070:
-                std::printf("[Bus       ] 16-bit write @ I_STAT = 0x%04X\n", data);
+                //std::printf("[Bus       ] 16-bit write @ I_STAT = 0x%04X\n", data);
                 return intc::writeStat(data);
             case 0x1F801074:
-                std::printf("[Bus       ] 16-bit write @ I_MASK = 0x%04X\n", data);
+                //std::printf("[Bus       ] 16-bit write @ I_MASK = 0x%04X\n", data);
                 return intc::writeMask(data);
             default:
                 std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
@@ -257,10 +266,10 @@ void write32(u32 addr, u32 data) {
                 std::printf("[Bus       ] 32-bit write @ RAM_SIZE = 0x%08X\n", data);
                 break;
             case 0x1F801070:
-                std::printf("[Bus       ] 32-bit write @ I_STAT = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ I_STAT = 0x%08X\n", data);
                 return intc::writeStat(data);
             case 0x1F801074:
-                std::printf("[Bus       ] 32-bit write @ I_MASK = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ I_MASK = 0x%08X\n", data);
                 return intc::writeMask(data);
             case 0x1F801810:
                 std::printf("[Bus       ] 32-bit write @ GP0 = 0x%08X\n", data);
