@@ -82,6 +82,8 @@ CopyInfo dstCopyInfo, srcCopyInfo;
 
 i64 lineCounter = 0;
 
+u32 drawMode;
+
 u64 idHBLANK, idScanline; // Scheduler
 
 /* Handles HBLANK events */
@@ -98,8 +100,12 @@ void scanlineEvent(i64 c) {
     if (lineCounter == SCANLINES_PER_VDRAW) {
         intc::sendInterrupt(Interrupt::VBLANK);
 
+        timer::gateVBLANKStart();
+
         update((u8 *)vram.data());
     } else if (lineCounter == SCANLINES_PER_FRAME) {
+        timer::gateVBLANKEnd();
+
         lineCounter = 0;
     }
     
@@ -232,6 +238,34 @@ void drawShadedTri(const Vertex &v0, const Vertex &v1, const Vertex &v2) {
 
                 drawPixel<true>(p.x, p.y, color);
             }
+        }
+    }
+}
+
+/* Draws a textured rectangle */
+void drawTexturedRect(const Vertex &v, i32 w, i32 h, u32 clut) {
+    auto a = v;
+
+    /* Offset coordinates */
+    a.x += xyoffset.xofs;
+    a.y += xyoffset.yofs;
+
+    /* Calculate bounding box */
+    auto xMin = std::max(a.x, xyarea.x0);
+    auto yMin = std::max(a.y, xyarea.y0);
+    auto xMax = std::min(xMin + w, xyarea.x1);
+    auto yMax = std::min(yMin + h, xyarea.y1);
+
+    for (auto y = yMin; y < yMax; y++) {
+        for (auto x = xMin; x < xMax; x++) {
+            const u32 texX = ((a.tex >>  0) & 0xFF) + x;
+            const u32 texY = ((a.tex >> 16) & 0xFF) + y;
+
+            const auto color = fetchTex(texX, texY, drawMode, clut);
+
+            /* TODO: texture blending */
+
+            drawPixel<false>(x, y, color);
         }
     }
 }
@@ -390,6 +424,21 @@ void drawQuad38() {
     state = GPUState::ReceiveCommand;
 }
 
+/* GP0(0x74) Draw Textured Rectangle (8x8, opaque) */
+void drawRect74() {
+    const auto c = cmdParam.front(); cmdParam.pop();
+    const auto v = cmdParam.front(); cmdParam.pop();
+    const auto t = cmdParam.front(); cmdParam.pop();
+
+    Vertex v0 = Vertex(v, c, t);
+
+    const auto clut = v0.tex >> 16;
+
+    drawTexturedRect(v0, 8, 8, clut);
+
+    state = GPUState::ReceiveCommand;
+}
+
 /* GP0(0xA0) Copy Rectangle (CPU->VRAM) */
 void copyCPUToVRAM() {
     const auto coords = cmdParam.front(); cmdParam.pop();
@@ -475,6 +524,9 @@ void writeGP0(u32 data) {
                 cmd = data >> 24;
 
                 switch (cmd) {
+                    case 0x00:
+                        std::printf("[GPU:GP0   ] NOP\n");
+                        break;
                     case 0x01:
                         std::printf("[GPU:GP0   ] Clear Cache\n");
                         break;
@@ -506,6 +558,13 @@ void writeGP0(u32 data) {
 
                         setArgCount(7);
                         break;
+                    case 0x74:
+                        std::printf("[GPU:GP0   ] Draw Textured Rectangle (8x8, opaque)\n");
+
+                        cmdParam.push(data); // Also first argument
+
+                        setArgCount(2);
+                        break;
                     case 0xA0:
                         std::printf("[GPU:GP0   ] Copy Rectangle (CPU->VRAM)\n");
 
@@ -518,6 +577,8 @@ void writeGP0(u32 data) {
                         break;
                     case 0xE1:
                         std::printf("[GPU:GP0   ] Set Draw Mode\n");
+
+                        drawMode = data & 0xFFFFFF;
                         break;
                     case 0xE2:
                         std::printf("[GPU:GP0   ] Set Texture Window\n");
@@ -540,6 +601,9 @@ void writeGP0(u32 data) {
                         xyoffset.xofs = ((i32)(((data >>  0) & 0x7FF) << 21) >> 21);
                         xyoffset.yofs = ((i32)(((data >> 11) & 0x7FF) << 21) >> 21);
                         break;
+                    case 0xE6:
+                        std::printf("[GPU:GP0   ] Set Mask Bit\n");
+                        break;
                     default:
                         std::printf("[GPU       ] Unhandled GP0 command 0x%02X (0x%08X)\n", cmd, data);
 
@@ -558,6 +622,7 @@ void writeGP0(u32 data) {
                     case 0x2C: drawQuad2C(); break;
                     case 0x30: drawTri30(); break;
                     case 0x38: drawQuad38(); break;
+                    case 0x74: drawRect74(); break;
                     case 0xA0: copyCPUToVRAM(); break;
                     case 0xC0: copyVRAMToCPU(); break;
                     default:
