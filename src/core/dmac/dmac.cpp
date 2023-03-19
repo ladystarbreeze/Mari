@@ -287,6 +287,7 @@ void init() {
     /* Set initial DRQs */
     channels[static_cast<int>(Channel::MDECIN)].drq = true;
     channels[static_cast<int>(Channel::GPU   )].drq = true; // Hack
+    channels[static_cast<int>(Channel::SPU   )].drq = true;
     channels[static_cast<int>(Channel::OTC   )].drq = true;
 
     /* TODO: register scheduler events */
