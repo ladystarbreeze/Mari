@@ -123,6 +123,9 @@ u16 read(u32 addr) {
                 mode.ovff = false;
             }
             break;
+        case TimerReg::COMP:
+            //std::printf("[Timer     ] 16-bit read @ T%d_COMP\n", chn);
+            return timer.comp;
         default:
             std::printf("[Timer     ] Unhandled 16-bit read @ 0x%08X\n", addr);
 
