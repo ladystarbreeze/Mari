@@ -77,6 +77,9 @@ u8 read8(u32 addr) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         return ram[addr];
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::SIO), static_cast<u32>(MemorySize::SIO))) {
+        std::printf("[Bus       ] Unhandled 8-bit read @ 0x%08X (SIO)\n", addr);
+        return 0;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         return bios[addr - static_cast<u32>(MemoryBase::BIOS)];
     } else {
@@ -97,6 +100,11 @@ u16 read16(u32 addr) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::SIO), static_cast<u32>(MemorySize::SIO))) {
+        std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X (SIO)\n", addr);
+        return 0xFFFF;
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
+        return timer::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPU), static_cast<u32>(MemorySize::SPU))) {
         //std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X (SPU)\n", addr);
 
@@ -179,7 +187,9 @@ void write8(u32 addr, u8 data) {
         ram[addr] = data;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPRAM), static_cast<u32>(MemorySize::SPRAM))) {
         spram[addr & 0x3FF]  = data;
-    }  else {
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::SIO), static_cast<u32>(MemorySize::SIO))) {
+        std::printf("[Bus       ] Unhandled 8-bit write @ 0x%08X (SIO) = 0x%02X\n", addr, data);
+    } else {
         switch (addr) {
             case 0x1F801800: case 0x1F801801: case 0x1F801802: case 0x1F801803:
                 return cdrom::write(addr, data);
@@ -195,6 +205,8 @@ void write8(u32 addr, u8 data) {
 void write16(u32 addr, u16 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         memcpy(&ram[addr], &data, sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::SIO), static_cast<u32>(MemorySize::SIO))) {
+        std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X (SIO) = 0x%04X\n", addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
         return timer::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPU), static_cast<u32>(MemorySize::SPU))) {
@@ -205,7 +217,7 @@ void write16(u32 addr, u16 data) {
                 //std::printf("[Bus       ] 16-bit write @ I_STAT = 0x%04X\n", data);
                 return intc::writeStat(data);
             case 0x1F801074:
-                //std::printf("[Bus       ] 16-bit write @ I_MASK = 0x%04X\n", data);
+                std::printf("[Bus       ] 16-bit write @ I_MASK = 0x%04X\n", data);
                 return intc::writeMask(data);
             default:
                 std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
@@ -269,7 +281,7 @@ void write32(u32 addr, u32 data) {
                 //std::printf("[Bus       ] 32-bit write @ I_STAT = 0x%08X\n", data);
                 return intc::writeStat(data);
             case 0x1F801074:
-                //std::printf("[Bus       ] 32-bit write @ I_MASK = 0x%08X\n", data);
+                std::printf("[Bus       ] 32-bit write @ I_MASK = 0x%08X\n", data);
                 return intc::writeMask(data);
             case 0x1F801810:
                 std::printf("[Bus       ] 32-bit write @ GP0 = 0x%08X\n", data);
