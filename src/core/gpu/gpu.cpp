@@ -84,6 +84,8 @@ i64 lineCounter = 0;
 
 u32 drawMode;
 
+u32 gpuread = 0;
+
 u64 idHBLANK, idScanline; // Scheduler
 
 /* Handles HBLANK events */
@@ -474,7 +476,67 @@ void copyVRAMToCPU() {
     srcCopyInfo.cx = srcCopyInfo.xMin;
     srcCopyInfo.cy = srcCopyInfo.yMin;
 
-    // state = GPUState::CopyRectangle;
+    state = GPUState::CopyRectangle;
+}
+
+/* GP0(0x80) Copy Rectangle (VRAM->VRAM) */
+void copyVRAMToVRAM() {
+    const auto srcCoord = cmdParam.front(); cmdParam.pop();
+    const auto dstCoord = cmdParam.front(); cmdParam.pop();
+    const auto dims     = cmdParam.front(); cmdParam.pop();
+
+    /* Set up transfer */
+
+    dstCopyInfo.xMin = (dstCoord >>  0) & 0xFFFF;
+    dstCopyInfo.yMin = (dstCoord >> 16) & 0xFFFF;
+
+    dstCopyInfo.cx = dstCopyInfo.xMin;
+    dstCopyInfo.cy = dstCopyInfo.yMin;
+
+    srcCopyInfo.xMin = (srcCoord >>  0) & 0xFFFF;
+    srcCopyInfo.yMin = (srcCoord >> 16) & 0xFFFF;
+
+    srcCopyInfo.xMax = ((dims >>  0) & 0xFFFF) + srcCopyInfo.xMin;
+    srcCopyInfo.yMax = (dims >> 16) & 0xFFFF;
+
+    srcCopyInfo.cx = srcCopyInfo.xMin;
+    srcCopyInfo.cy = srcCopyInfo.yMin;
+
+    /* Copy data */
+    
+    while (true) {
+        vram[dstCopyInfo.cx + 1024 * dstCopyInfo.cy] = vram[srcCopyInfo.cx + 1024 * srcCopyInfo.cy];
+
+        srcCopyInfo.cx++;
+        dstCopyInfo.cx++;
+
+        if (srcCopyInfo.cx >= srcCopyInfo.xMax) {
+            srcCopyInfo.cy++;
+            dstCopyInfo.cy++;
+
+            if (srcCopyInfo.cy >= srcCopyInfo.yMax) break;
+
+            srcCopyInfo.cx = srcCopyInfo.xMin;
+            dstCopyInfo.cx = dstCopyInfo.xMin;
+        }
+
+        vram[dstCopyInfo.cx + 1024 * dstCopyInfo.cy] = vram[srcCopyInfo.cx + 1024 * srcCopyInfo.cy];
+
+        srcCopyInfo.cx++;
+        dstCopyInfo.cx++;
+
+        if (srcCopyInfo.cx >= srcCopyInfo.xMax) {
+            srcCopyInfo.cy++;
+            dstCopyInfo.cy++;
+
+            if (srcCopyInfo.cy >= srcCopyInfo.yMax) break;
+
+            srcCopyInfo.cx = srcCopyInfo.xMin;
+            dstCopyInfo.cx = dstCopyInfo.xMin;
+        }
+    }
+
+    state = GPUState::ReceiveCommand;
 }
 
 void init() {
@@ -489,6 +551,14 @@ void init() {
 
 u32 readGPUREAD() {
     u32 data;
+
+    if (state != GPUState::CopyRectangle) {
+        data = gpuread;
+
+        gpuread = 0;
+
+        return data;
+    }
 
     auto &c = srcCopyInfo;
 
@@ -565,6 +635,11 @@ void writeGP0(u32 data) {
 
                         setArgCount(2);
                         break;
+                    case 0x80:
+                        std::printf("[GPU:GP0   ] Copy Rectangle (VRAM->VRAM)\n");
+
+                        setArgCount(3);
+                        break;
                     case 0xA0:
                         std::printf("[GPU:GP0   ] Copy Rectangle (CPU->VRAM)\n");
 
@@ -623,6 +698,7 @@ void writeGP0(u32 data) {
                     case 0x30: drawTri30(); break;
                     case 0x38: drawQuad38(); break;
                     case 0x74: drawRect74(); break;
+                    case 0x80: copyVRAMToVRAM(); break;
                     case 0xA0: copyCPUToVRAM(); break;
                     case 0xC0: copyVRAMToCPU(); break;
                     default:
@@ -698,6 +774,24 @@ void writeGP1(u32 data) {
             break;
         case 0x08:
             std::printf("[GPU:GP1   ] Set Display Mode\n");
+            break;
+        case 0x10:
+            std::printf("[GPU:GP1   ] Get GPU Info\n");
+
+            switch (data & 7) {
+                case 2: // Texture Window
+                    break;
+                case 3:
+                    gpuread = (xyarea.y0 << 10) | xyarea.x0;
+                    break;
+                case 4:
+                    gpuread = (xyarea.y1 << 10) | xyarea.x1;
+                    break;
+                case 5: // Drawing Offset
+                    break;
+                default:
+                    break;
+            }
             break;
         default:
             std::printf("[GPU       ] Unhandled GP1 command 0x%02X (0x%08X)\n", cmd, data);
