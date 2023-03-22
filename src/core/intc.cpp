@@ -45,7 +45,7 @@ u16 readStat() {
 void writeMask(u16 data) {
     iMASK = (data & 0x7FF);
 
-    assert(!(iMASK & 0x7F2));
+    assert(!(iMASK & 0x702));
 
     checkInterrupt();
 }
@@ -58,7 +58,7 @@ void writeStat(u16 data) {
 }
 
 void sendInterrupt(Interrupt i) {
-    std::printf("[INTC      ] %s interrupt request\n", intNames[static_cast<int>(i)]);
+    //std::printf("[INTC      ] %s interrupt request\n", intNames[static_cast<int>(i)]);
 
     iSTAT |= 1 << static_cast<int>(i);
 

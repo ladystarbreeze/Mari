@@ -25,6 +25,8 @@ constexpr i64 CPU_SPEED = 44100 * 0x300;
 constexpr i64 READ_TIME_SINGLE = CPU_SPEED / 75;
 constexpr i64 READ_TIME_DOUBLE = CPU_SPEED / (2 * 75);
 
+constexpr i64 INT3_TIME = 20000;
+
 /* CDROM commands */
 enum Command {
     GetStat = 0x01,
@@ -34,6 +36,8 @@ enum Command {
     Init    = 0x0A,
     Unmute  = 0x0C,
     SetMode = 0x0E,
+    GetTN   = 0x13,
+    GetTD   = 0x14,
     SeekL   = 0x15,
     GetID   = 0x1A,
 };
@@ -102,7 +106,8 @@ void sendIRQEvent(int irq) {
 
     /* If this is an INT1, read sector and send new INT1 */
     if (irq == 1) {
-        readSector();
+        // Send status
+        responseFIFO.push(stat);
 
         if (mode & static_cast<u8>(Mode::Speed)) {
             scheduler::addEvent(idSendIRQ, 1, READ_TIME_DOUBLE, false);
@@ -128,7 +133,7 @@ void readSector() {
 
     file.read((char *)readBuf, SECTOR_SIZE);
 
-    readIdx = (mode & static_cast<u8>(Mode::FullSector)) ? 12 : 24;
+    readIdx = (mode & static_cast<u8>(Mode::FullSector)) ? 0x0C : 0x18;
 
     s.sector++;
 
@@ -146,6 +151,14 @@ void readSector() {
     std::printf("[CDROM     ] Next seek to [%02X:%02X:%02X]\n", s.mins, s.secs, s.sector);
 }
 
+u8 readResponse() {
+    assert(!responseFIFO.empty());
+
+    const auto data = responseFIFO.front(); responseFIFO.pop();
+
+    return data;
+}
+
 /* Get ID - Activate motor, set mode = 0x20, abort all commands */
 void cmdGetID() {
     std::printf("[CDROM     ] Get ID\n");
@@ -154,7 +167,7 @@ void cmdGetID() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, 30000, false);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, false);
 
     /* Licensed, Mode2 */
     responseFIFO.push(0x02);
@@ -162,13 +175,13 @@ void cmdGetID() {
     responseFIFO.push(0x20);
     responseFIFO.push(0x00);
 
-    responseFIFO.push(0x53);
-    responseFIFO.push(0x43);
-    responseFIFO.push(0x45);
+    responseFIFO.push('M');
+    responseFIFO.push('A');
+    responseFIFO.push('R');
     responseFIFO.push('I');
 
     // Send INT2
-    scheduler::addEvent(idSendIRQ, 2, 50000, true);
+    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 30000, true);
 }
 
 /* Get Stat - Activate motor, set mode = 0x20, abort all commands */
@@ -182,7 +195,35 @@ void cmdGetStat() {
     stat &= ~static_cast<u8>(Status::ShellOpen);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, 20000, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+}
+
+/* Get TD - Returns track start */
+void cmdGetTD() {
+    std::printf("[CDROM     ] Get TD\n");
+
+    paramFIFO.pop();
+
+    // Send status
+    responseFIFO.push(stat);
+    responseFIFO.push(0);
+    responseFIFO.push(0);
+
+    // Send INT3
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+}
+
+/* Get TN - Returns first and last track number */
+void cmdGetTN() {
+    std::printf("[CDROM     ] Get TN\n");
+
+    // Send status
+    responseFIFO.push(stat);
+    responseFIFO.push(0x01);
+    responseFIFO.push(0x01);
+
+    // Send INT3
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
 }
 
 /* Init - Activate motor, set mode = 0x20, abort all commands */
@@ -203,7 +244,7 @@ void cmdInit() {
     responseFIFO.push(mode);
 
     // Send INT2
-    scheduler::addEvent(idSendIRQ, 2, 110000, true);
+    scheduler::addEvent(idSendIRQ, 2, 80000 + 20000, true);
 }
 
 /* Pause */
@@ -212,17 +253,20 @@ void cmdPause() {
 
     scheduler::removeEvent(idSendIRQ); // Kill all pending CDROM events
 
+    /* Clear response buffer */
+    while (!responseFIFO.empty()) responseFIFO.pop();
+
     // Send status
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, 20000, false);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, false);
 
     /* Pause is faster if drive is already paused */
     if (!(stat & (static_cast<u8>(Status::Play) | static_cast<u8>(Status::Read)))) {
-        scheduler::addEvent(idSendIRQ, 2, 20000 + 10000, true);
+        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 10000, true);
     } else {
-        scheduler::addEvent(idSendIRQ, 2, 20000 + 5 * READ_TIME_SINGLE, true);
+        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 5 * READ_TIME_SINGLE, true);
     }
 
     /* Pause drive */
@@ -241,19 +285,16 @@ void cmdReadN() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, 30000, false);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, false);
 
     stat &= ~static_cast<u8>(Status::Seek);
     stat |=  static_cast<u8>(Status::Read);
 
-    // Send status
-    responseFIFO.push(stat);
-
     // Send INT2
     if (stat & static_cast<u8>(Mode::Speed)) {
-        scheduler::addEvent(idSendIRQ, 1, 30000 + READ_TIME_DOUBLE, true);
+        scheduler::addEvent(idSendIRQ, 1, INT3_TIME + READ_TIME_DOUBLE, true);
     } else {
-        scheduler::addEvent(idSendIRQ, 1, 30000 + READ_TIME_SINGLE, true);
+        scheduler::addEvent(idSendIRQ, 1, INT3_TIME + READ_TIME_SINGLE, true);
     }
 }
 
@@ -265,7 +306,7 @@ void cmdSeekL() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, 30000, false);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, false);
 
     stat |= static_cast<u8>(Status::Seek);
 
@@ -273,7 +314,7 @@ void cmdSeekL() {
     responseFIFO.push(stat);
 
     // Send INT2
-    scheduler::addEvent(idSendIRQ, 2, 120000, true);
+    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 80000, true);
 }
 
 /* Set Loc - Sets seek parameters */
@@ -289,7 +330,7 @@ void cmdSetLoc() {
     seekParam.sector = paramFIFO.front(); paramFIFO.pop();
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, 30000, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
 }
 
 /* Set Mode - Sets CDROM  mode */
@@ -302,7 +343,7 @@ void cmdSetMode() {
     mode = paramFIFO.front(); paramFIFO.pop();
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, 30000, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
 }
 
 /* Unmute */
@@ -313,7 +354,7 @@ void cmdUnmute() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, 30000, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
 }
 
 /* Handles CDROM  commands */
@@ -328,6 +369,8 @@ void doCmd(u8 data) {
         case Command::Init   : cmdInit(); break;
         case Command::Unmute : cmdUnmute(); break;
         case Command::SetMode: cmdSetMode(); break;
+        case Command::GetTN  : cmdGetTN(); break;
+        case Command::GetTD  : cmdGetTD(); break;
         case Command::SeekL  : cmdSeekL(); break;
         case Command::GetID  : cmdGetID(); break;
         default:
@@ -359,12 +402,12 @@ u8 read(u32 addr) {
             {
                 //std::printf("[CDROM     ] 8-bit read @ STATUS\n");
 
-                u8 data = index | 4;
+                u8 data = index;
 
                 data |= paramFIFO.empty() << 3;        // Parameter FIFO empty
                 data |= (paramFIFO.size() != 16) << 4; // Parameter FIFO not full
                 data |= !responseFIFO.empty() << 5;    // Response FIFO not empty
-                data |= (readIdx != SECTOR_SIZE) << 6;  // Data FIFO not empty
+                data |= (readIdx != SECTOR_SIZE) << 6; // Data FIFO not empty
 
                 return data;
             }
@@ -372,9 +415,7 @@ u8 read(u32 addr) {
             {
                 std::printf("[CDROM     ] 8-bit read @ RESPONSE\n");
 
-                const auto data = responseFIFO.front(); responseFIFO.pop();
-
-                return data;
+                return readResponse();
             }
         case 0x1F801803:
             switch (index) {
@@ -453,8 +494,8 @@ void write(u32 addr, u8 data) {
 
                     assert(!(data & (1 << 5)));
 
-                    if (!(data & (1 << 7))) {
-                        //readIdx = 0;
+                    if (data & (1 << 7)) {
+                        readSector();
                     }
                     break;
                 case 1:
