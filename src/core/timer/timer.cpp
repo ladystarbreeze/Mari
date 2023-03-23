@@ -197,14 +197,13 @@ void write(u32 addr, u16 data) {
                 }
 
                 if (mode.clks) {
-                    if (chn == 1) {
-                        
-                    } else if (chn == 2) {
-                        timer.prescaler = 1 + 7 * (u16)(mode.clks > 1);
-                    } else {
-                        std::printf("[Timer     ] Unhandled clock source\n");
+                    switch (chn) {
+                        case 1: break;
+                        case 2: timer.prescaler = 1 + 7 * (u16)(mode.clks > 1); break;
+                        default:
+                            std::printf("[Timer     ] Unhandled clock source\n");
 
-                        exit(0);
+                            exit(0);
                     }
                 }
 
@@ -250,6 +249,8 @@ void step(i64 c) {
                 }
             }
 
+            timer.count &= 0xFFFF;
+
             if (timer.count == timer.comp) {
                 if (timer.mode.cmpe && !timer.mode.equf) {
                     // Checking EQUF is necessary because timer IRQs are edge-triggered
@@ -260,8 +261,6 @@ void step(i64 c) {
 
                 if (timer.mode.zret) timer.count = 0;
             }
-
-            timer.count &= 0xFFFF;
 
             timer.subcount -= timer.prescaler;
         }
@@ -288,6 +287,8 @@ void stepHBLANK() {
         }
     }
 
+    timer.count &= 0xFFFF;
+
     if (timer.count == timer.comp) {
         if (timer.mode.cmpe && !timer.mode.equf) {
             // Checking EQUF is necessary because timer IRQs are edge-triggered
@@ -298,8 +299,6 @@ void stepHBLANK() {
 
         if (timer.mode.zret) timer.count = 0;
     }
-
-    timer.count &= 0xFFFF;
 }
 
 /* Handle VBLANK start gate events */
