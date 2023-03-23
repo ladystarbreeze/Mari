@@ -174,6 +174,12 @@ u32 read32(u32 addr) {
                 //std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
                 gpustat ^= 1 << 31;
                 return gpustat;
+            case 0x1F801820:
+                std::printf("[Bus       ] Unhandled 32-bit read @ MDEC_DATA\n");
+                return 0;
+            case 0x1F801824:
+                std::printf("[Bus       ] Unhandled 32-bit read @ MDEC_STAT\n");
+                return 0;
             default:
                 std::printf("[Bus       ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
@@ -318,6 +324,12 @@ void write32(u32 addr, u32 data) {
                 std::printf("[Bus       ] 32-bit write @ GP1 = 0x%08X\n", data);
 
                 gpu::writeGP1(data);
+                break;
+            case 0x1F801820:
+                std::printf("[Bus       ] Unhandled 32-bit write @ MDEC_CMD = 0x%08X\n", data);
+                break;
+            case 0x1F801824:
+                std::printf("[Bus       ] Unhandled 32-bit write @ MDEC_CTRL = 0x%08X\n", data);
                 break;
             case 0x1FFE0130:
                 std::printf("[Bus       ] 32-bit write @ CACHE_CONTROL = 0x%08X\n", data);
