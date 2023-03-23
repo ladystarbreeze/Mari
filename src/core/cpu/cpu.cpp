@@ -295,7 +295,7 @@ void doBranch(u32 target, bool isCond, u32 rd) {
 
 /* Raises a CPU exception */
 void raiseException(Exception e) {
-    std::printf("[CPU       ] %s exception @ 0x%08X\n", cop0::eNames[e], cpc);
+    //std::printf("[CPU       ] %s exception @ 0x%08X\n", cop0::eNames[e], cpc);
 
     cop0::enterException(e); // Set exception code, save privilege and interrupt enable bits
 
