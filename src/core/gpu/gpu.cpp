@@ -33,6 +33,7 @@ constexpr size_t VRAM_HEIGHT = 512;
 /* 2D vertex */
 struct Vertex {
     Vertex() : x(0), y(0), c(0), tex(0) {}
+    Vertex(u32 v) : x((i32)((v & 0x7FF) << 21) >> 21), y((i32)(((v >> 16) & 0x7FF) << 21) >> 21), c(0), tex(0) {}
     Vertex(u32 v, u32 c) : x((i32)((v & 0x7FF) << 21) >> 21), y((i32)(((v >> 16) & 0x7FF) << 21) >> 21), c(c & 0xFFFFFF), tex(0) {}
     Vertex(u32 v, u32 c, u32 tex) : x((i32)((v & 0x7FF) << 21) >> 21), y((i32)(((v >> 16) & 0x7FF) << 21) >> 21), c(c & 0xFFFFFF), tex(tex) {}
 
@@ -183,6 +184,55 @@ u16 fetchTex(i32 texX, i32 texY, u32 texPage, u32 clut) {
         case 16: return texel;
         default:
             assert(false); // Shouldn't happen
+    }
+}
+
+/* Draws a flat shaded triangle */
+void drawFlatTri(const Vertex &v0, const Vertex &v1, const Vertex &v2, u32 color) {
+    Vertex p, a, b, c;
+
+    a = v0;
+
+    /* Ensure the winding order is correct */
+    if (edgeFunction(v0, v1, v2) < 0) {
+        b = v2;
+        c = v1;
+    } else {
+        b = v1;
+        c = v2;
+    }
+
+    /* Offset coordinates */
+    a.x += xyoffset.xofs;
+    b.x += xyoffset.xofs;
+    c.x += xyoffset.xofs;
+    a.y += xyoffset.yofs;
+    b.y += xyoffset.yofs;
+    c.y += xyoffset.yofs;
+
+    /* Calculate bounding box */
+    auto xMin = std::min(a.x, std::min(b.x, c.x));
+    auto yMin = std::min(a.y, std::min(b.y, c.y));
+    auto xMax = std::max(a.x, std::max(b.x, c.x));
+    auto yMax = std::max(a.y, std::max(b.y, c.y));
+
+    xMin = std::max(xMin, xyarea.x0);
+    yMin = std::max(yMin, xyarea.y0);
+    xMax = std::min(xMax, xyarea.x1);
+    yMax = std::min(yMax, xyarea.y1);
+
+    color = toBGR555(color);
+
+    for (p.y = yMin; p.y < yMax; p.y++) {
+        for (p.x = xMin; p.x < xMax; p.x++) {
+            /* Calculate weights */
+            const auto w0 = edgeFunction(b, c, p);
+            const auto w1 = edgeFunction(c, a, p);
+            const auto w2 = edgeFunction(a, b, p);
+
+            /* Is point inside of triangle ? */
+            if ((w0 >= 0) && (w1 >= 0) && (w2 >= 0)) drawPixel<false>(p.x, p.y, color);
+        }
     }
 }
 
@@ -381,6 +431,21 @@ void drawTri30() {
     state = GPUState::ReceiveCommand;
 }
 
+/* GP0(0x28) Draw Flat Quadrilateral (opaque) */
+void drawQuad28() {
+    const auto color = cmdParam.front(); cmdParam.pop();
+
+    const auto v0 = cmdParam.front(); cmdParam.pop();
+    const auto v1 = cmdParam.front(); cmdParam.pop();
+    const auto v2 = cmdParam.front(); cmdParam.pop();
+    const auto v3 = cmdParam.front(); cmdParam.pop();
+
+    drawFlatTri(Vertex(v0), Vertex(v1), Vertex(v2), color);
+    drawFlatTri(Vertex(v1), Vertex(v2), Vertex(v3), color);
+
+    state = GPUState::ReceiveCommand;
+}
+
 /* GP0(0x2C) Draw Textured Quadrilateral (semi-transparent, blended) */
 void drawQuad2C() {
     const auto c = cmdParam.front(); cmdParam.pop();
@@ -422,6 +487,23 @@ void drawQuad38() {
 
     drawShadedTri(Vertex(v0, c0), Vertex(v1, c1), Vertex(v2, c2));
     drawShadedTri(Vertex(v1, c1), Vertex(v2, c2), Vertex(v3, c3));
+
+    state = GPUState::ReceiveCommand;
+}
+
+/* GP0(0x65) Draw Textured Rectangle (variable, opaque) */
+void drawRect65() {
+    const auto c = cmdParam.front(); cmdParam.pop();
+    const auto v = cmdParam.front(); cmdParam.pop();
+    const auto t = cmdParam.front(); cmdParam.pop();
+
+    const auto dims = cmdParam.front(); cmdParam.pop();
+
+    Vertex v0 = Vertex(v, c, t);
+
+    const auto clut = v0.tex >> 16;
+
+    drawTexturedRect(v0, dims & 0xFFFF, dims >> 16, clut);
 
     state = GPUState::ReceiveCommand;
 }
@@ -607,7 +689,16 @@ void writeGP0(u32 data) {
 
                         setArgCount(2);
                         break;
+                    case 0x28:
+                        std::printf("[GPU:GP0   ] Draw Flat Quad (opaque)\n");
+
+                        cmdParam.push(data); // Also first argument
+
+                        setArgCount(4);
+                        break;
                     case 0x2C:
+                    case 0x2D:
+                    case 0x2F:
                         std::printf("[GPU:GP0   ] Draw Textured Quad (semi-transparent, blended)\n");
 
                         cmdParam.push(data); // Also first argument
@@ -627,6 +718,14 @@ void writeGP0(u32 data) {
                         cmdParam.push(data); // Also first argument
 
                         setArgCount(7);
+                        break;
+                    case 0x64:
+                    case 0x65:
+                        std::printf("[GPU:GP0   ] Draw Textured Rectangle (variable, opaque)\n");
+
+                        cmdParam.push(data); // Also first argument
+
+                        setArgCount(3);
                         break;
                     case 0x74:
                         std::printf("[GPU:GP0   ] Draw Textured Rectangle (8x8, opaque)\n");
@@ -687,16 +786,25 @@ void writeGP0(u32 data) {
             }
             break;
         case GPUState::ReceiveArguments:
-            std::printf("[GPU:GP0   ] 0x%08X\n", data);
+            //std::printf("[GPU:GP0   ] 0x%08X\n", data);
 
             cmdParam.push(data);
 
             if (!--argCount) {
                 switch (cmd) {
                     case 0x02: fillRect(); break;
-                    case 0x2C: drawQuad2C(); break;
+                    case 0x28: drawQuad28(); break;
+                    case 0x2C:
+                    case 0x2D:
+                    case 0x2F:
+                        drawQuad2C();
+                        break;
                     case 0x30: drawTri30(); break;
                     case 0x38: drawQuad38(); break;
+                    case 0x64:
+                    case 0x65:
+                        drawRect65();
+                        break;
                     case 0x74: drawRect74(); break;
                     case 0x80: copyVRAMToVRAM(); break;
                     case 0xA0: copyCPUToVRAM(); break;
@@ -712,7 +820,7 @@ void writeGP0(u32 data) {
             {
                 auto &c = dstCopyInfo;
 
-                std::printf("[GPU:GP0   ] [0x%08X] = 0x%04X\n", c.cx + 1024 * c.cy, data & 0xFFFF);
+                //std::printf("[GPU:GP0   ] [0x%08X] = 0x%04X\n", c.cx + 1024 * c.cy, data & 0xFFFF);
 
                 vram[c.cx + 1024 * c.cy] = data;
 
@@ -724,7 +832,7 @@ void writeGP0(u32 data) {
                     c.cx = c.xMin;
                 }
 
-                std::printf("[GPU:GP0   ] [0x%08X] = 0x%04X\n", c.cx + 1024 * c.cy, data >> 16);
+                //std::printf("[GPU:GP0   ] [0x%08X] = 0x%04X\n", c.cx + 1024 * c.cy, data >> 16);
 
                 vram[c.cx + 1024 * c.cy] = data >> 16;
 
