@@ -130,20 +130,19 @@ void doCDROM() {
     assert(!chcr.dir); // Always to RAM
     assert(chcr.mod == Mode::Burst); // Always burst?
     assert(!chcr.dec); // Always incrementing?
-    assert(chn.len);
+    assert(chn.size);
 
-    for (int i = chn.len; i > 0; i--) {
+    for (int i = 0; i < chn.size; i++) {
         bus::write32(chn.madr, cdrom::getData32());
 
         chn.madr += 4;
     }
 
-    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 24 * chn.len, true);
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 24 * chn.size, true);
 
     /* Clear BCR */
     chn.count = 0;
     chn.size  = 0;
-    chn.len   = 0;
 }
 
 /* Handles GPU DMA */
@@ -155,7 +154,6 @@ void doGPU() {
 
     std::printf("[DMAC      ] GPU transfer\n");
 
-    assert(chcr.dir);
     assert((chcr.mod == Mode::Slice) || (chcr.mod == Mode::LinkedList));
     assert(!chcr.dec); // Always incrementing?
 
@@ -166,12 +164,22 @@ void doGPU() {
 
         len += chn.len;
 
-        for (int i = 0; i < len; i++) {
-            gpu::writeGP0(bus::read32(chn.madr));
+        if (chcr.dir) { // To GPU
+            for (int i = 0; i < len; i++) {
+                gpu::writeGP0(bus::read32(chn.madr));
 
-            chn.madr += 4;
+                chn.madr += 4;
+            }
+        } else { // To RAM
+            for (int i = 0; i < len; i++) {
+                bus::write32(chn.madr, gpu::readGPUREAD());
+
+                chn.madr += 4;
+            }
         }
     } else {
+        assert(chcr.dir);
+
         /* Linked list DMA */
         while (true) {
             /* Get header */
@@ -236,10 +244,35 @@ void doOTC() {
     chn.size  = 0;
 }
 
+/* Handles SPU DMA */
+void doSPU() {
+    const auto chnID = Channel::SPU;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC      ] SPU transfer\n");
+
+    //assert(!chcr.dir); // Always to RAM?
+    assert(chcr.mod == Mode::Slice); // Always slice?
+    assert(!chcr.dec); // Always incrementing?
+    assert(chn.len);
+
+    /* TODO: SPU DMA */
+
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * chn.len, true);
+
+    /* Clear BCR */
+    chn.count = 0;
+    chn.size  = 0;
+    chn.len   = 0;
+}
+
 void startDMA(Channel chn) {
     switch (chn) {
         case Channel::GPU  : doGPU(); break;
         case Channel::CDROM: doCDROM(); break;
+        case Channel::SPU  : doSPU(); break;
         case Channel::OTC  : doOTC(); break;
         default:
             std::printf("[DMAC      ] Unhandled channel %d (%s) transfer\n", chn, chnNames[static_cast<int>(chn)]);
