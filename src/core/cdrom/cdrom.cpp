@@ -20,12 +20,13 @@ using Interrupt = intc::Interrupt;
 /* --- CDROM constants --- */
 
 constexpr int SECTOR_SIZE = 2352;
+constexpr int READ_SIZE   = 0x818;
 
 constexpr i64 CPU_SPEED = 44100 * 0x300;
 constexpr i64 READ_TIME_SINGLE = CPU_SPEED / 75;
 constexpr i64 READ_TIME_DOUBLE = CPU_SPEED / (2 * 75);
 
-constexpr i64 INT3_TIME = 20000;
+constexpr i64 INT3_TIME = 10000;
 
 /* CDROM commands */
 enum Command {
@@ -147,15 +148,15 @@ void readSector() {
     s.sector++;
 
     /* Increment BCD values */
-    if ((s.sector & 0xF) == 10) { s.sector += 10; s.sector &= 0xF0; }
+    if ((s.sector & 0xF) == 10) { s.sector += 0x10; s.sector &= 0xF0; }
 
     if (s.sector == 0x75) { s.secs++; s.sector = 0; }
 
-    if ((s.secs & 0xF) == 10) { s.secs += 10; s.secs &= 0xF0; }
+    if ((s.secs & 0xF) == 10) { s.secs += 0x10; s.secs &= 0xF0; }
 
     if (s.secs == 0x60) { s.mins++; s.secs = 0; }
 
-    if ((s.mins & 0xF) == 10) { s.mins += 10; s.mins &= 0xF0; }
+    if ((s.mins & 0xF) == 10) { s.mins += 0x10; s.mins &= 0xF0; }
 
     std::printf("[CDROM     ] Next seek to [%02X:%02X:%02X]\n", s.mins, s.secs, s.sector);
 }
@@ -263,7 +264,7 @@ void cmdReadTOC() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, false);
 
     // Send INT2
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME + 20000, true);
@@ -465,7 +466,7 @@ u8 read(u32 addr) {
                 data |= paramFIFO.empty() << 3;        // Parameter FIFO empty
                 data |= (paramFIFO.size() != 16) << 4; // Parameter FIFO not full
                 data |= !responseFIFO.empty() << 5;    // Response FIFO not empty
-                data |= (readIdx < 0x818) << 6; // Data FIFO not empty
+                data |= (readIdx < READ_SIZE) << 6;    // Data FIFO not empty
 
                 return data;
             }
@@ -577,7 +578,7 @@ void write(u32 addr, u8 data) {
 }
 
 u32 getData32() {
-    assert(readIdx != SECTOR_SIZE);
+    assert(readIdx < READ_SIZE);
 
     u32 data;
 
