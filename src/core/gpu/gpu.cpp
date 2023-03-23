@@ -152,8 +152,6 @@ u16 fetchTex(i32 texX, i32 texY, u32 texPage, u32 clut) {
 
     const auto depth = texDepth[(texPage >> 7) & 3];
 
-    assert((depth == 4) || (depth == 16));
-
     u32 x = 0;
 
     switch (depth) {
@@ -171,20 +169,14 @@ u16 fetchTex(i32 texX, i32 texY, u32 texPage, u32 clut) {
 
     const auto texel = vram[x + 1024 * y];
 
-    switch (depth) {
-        case 4:
-            {
-                const auto clutX = 16 * (clut & 0x3F);
-                const auto clutY = (clut >> 6) & 0x1FF;
-                const auto clutOfs = (texel >> (4 * (texX & 3))) & 0xF;
+    if (depth == 16) return texel;
 
-                return vram[(clutX + clutOfs) + 1024 * clutY];
-            }
-            break;
-        case 16: return texel;
-        default:
-            assert(false); // Shouldn't happen
-    }
+    const auto clutX = 16 * (clut & 0x3F);
+    const auto clutY = (clut >> 6) & 0x1FF;
+
+    const auto clutOfs = (depth == 4) ? (texel >> (4 * (texX & 3))) & 0xF : (texel >> (8 * (texX & 1))) & 0xFF;
+
+    return vram[(clutX + clutOfs) + 1024 * clutY];
 }
 
 /* Draws a flat shaded triangle */
@@ -232,6 +224,27 @@ void drawFlatTri(const Vertex &v0, const Vertex &v1, const Vertex &v2, u32 color
 
             /* Is point inside of triangle ? */
             if ((w0 >= 0) && (w1 >= 0) && (w2 >= 0)) drawPixel<false>(p.x, p.y, color);
+        }
+    }
+}
+
+/* Draws a flat rectangle */
+void drawFlatRect(const Vertex &v, i32 w, i32 h, u32 color) {
+    auto a = v;
+
+    /* Offset coordinates */
+    a.x += xyoffset.xofs;
+    a.y += xyoffset.yofs;
+
+    /* Calculate bounding box */
+    auto xMin = std::max(a.x, xyarea.x0);
+    auto yMin = std::max(a.y, xyarea.y0);
+    auto xMax = std::min(xMin + w, xyarea.x1);
+    auto yMax = std::min(yMin + h, xyarea.y1);
+
+    for (auto y = yMin; y < yMax; y++) {
+        for (auto x = xMin; x < xMax; x++) {
+            drawPixel<false>(x, y, color);
         }
     }
 }
@@ -491,6 +504,20 @@ void drawQuad38() {
     state = GPUState::ReceiveCommand;
 }
 
+/* GP0(0x60) Draw Flat Rectangle (variable) */
+void drawRect60() {
+    const auto c = cmdParam.front(); cmdParam.pop();
+    const auto v = cmdParam.front(); cmdParam.pop();
+
+    const auto dims = cmdParam.front(); cmdParam.pop();
+
+    Vertex v0 = Vertex(v, c);
+
+    drawFlatRect(v0, dims & 0xFFFF, dims >> 16, c);
+
+    state = GPUState::ReceiveCommand;
+}
+
 /* GP0(0x65) Draw Textured Rectangle (variable, opaque) */
 void drawRect65() {
     const auto c = cmdParam.front(); cmdParam.pop();
@@ -719,6 +746,14 @@ void writeGP0(u32 data) {
 
                         setArgCount(7);
                         break;
+                    case 0x60:
+                    case 0x62:
+                        std::printf("[GPU:GP0   ] Draw Flat Rectangle (variable)\n");
+
+                        cmdParam.push(data); // Also first argument
+
+                        setArgCount(2);
+                        break;
                     case 0x64:
                     case 0x65:
                         std::printf("[GPU:GP0   ] Draw Textured Rectangle (variable, opaque)\n");
@@ -801,6 +836,10 @@ void writeGP0(u32 data) {
                         break;
                     case 0x30: drawTri30(); break;
                     case 0x38: drawQuad38(); break;
+                    case 0x60:
+                    case 0x62:
+                        drawRect60();
+                        break;
                     case 0x64:
                     case 0x65:
                         drawRect65();
