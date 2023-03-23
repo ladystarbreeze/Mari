@@ -43,6 +43,12 @@ struct Vertex {
     u32 tex; // Tex coord
 };
 
+/* Texture window */
+struct TexWindow {
+    u32 maskX, maskY;
+    u32 ofsX, ofsY;
+};
+
 /* Drawing area */
 struct XYArea {
     i32 x0, x1, y0, y1;
@@ -76,8 +82,9 @@ std::queue<u32> cmdParam;
 std::vector<u16> vram;
 
 /* GPU drawing parameters */
-XYArea xyarea;
-XYOffset xyoffset;
+XYArea    xyarea;
+XYOffset  xyoffset;
+TexWindow texWindow;
 
 CopyInfo dstCopyInfo, srcCopyInfo;
 
@@ -145,6 +152,10 @@ i32 edgeFunction(const Vertex &a, const Vertex &b, const Vertex &c) {
 
 u16 fetchTex(i32 texX, i32 texY, u32 texPage, u32 clut) {
     static const u32 texDepth[4] = { 4, 8, 16, 0 };
+
+    /* Apply tex window */
+    texX = (texX & ~texWindow.maskX) | (texWindow.ofsX & texWindow.maskX);
+    texY = (texY & ~texWindow.maskY) | (texWindow.ofsY & texWindow.maskY);
 
     /* Get tex page coordinates */
     const auto texPageX = texPage & 0xF;
@@ -328,7 +339,8 @@ void drawTexturedRect(const Vertex &v, i32 w, i32 h, u32 clut) {
 
             const auto color = fetchTex(texX, texY, drawMode, clut);
 
-            /* TODO: texture blending */
+            /* TODO: handle semi-transparency/blending */
+            if (!color) continue;
 
             drawPixel<false>(x, y, color);
         }
@@ -405,10 +417,6 @@ void fillRect() {
 
     auto x0 = 16 * ((coords >>  0) & 0xFFFF); // In 16px units
     auto y0 = 16 * ((coords >> 16) & 0xFFFF); // In 16px units
-
-    /* Offset coordinates */
-    x0 += xyoffset.xofs;
-    y0 += xyoffset.yofs;
 
     const auto width  = 16 * ((dims >>  0) & 0xFFFF); // In 16px units
     const auto height = 16 * ((dims >> 16) & 0xFFFF); // In 16px units
@@ -546,6 +554,21 @@ void drawRect74() {
     const auto clut = v0.tex >> 16;
 
     drawTexturedRect(v0, 8, 8, clut);
+
+    state = GPUState::ReceiveCommand;
+}
+
+/* GP0(0x7C) Draw Textured Rectangle (16x16, opaque) */
+void drawRect7C() {
+    const auto c = cmdParam.front(); cmdParam.pop();
+    const auto v = cmdParam.front(); cmdParam.pop();
+    const auto t = cmdParam.front(); cmdParam.pop();
+
+    Vertex v0 = Vertex(v, c, t);
+
+    const auto clut = v0.tex >> 16;
+
+    drawTexturedRect(v0, 16, 16, clut);
 
     state = GPUState::ReceiveCommand;
 }
@@ -717,6 +740,7 @@ void writeGP0(u32 data) {
                         setArgCount(2);
                         break;
                     case 0x28:
+                    case 0x2A:
                         std::printf("[GPU:GP0   ] Draw Flat Quad (opaque)\n");
 
                         cmdParam.push(data); // Also first argument
@@ -740,6 +764,7 @@ void writeGP0(u32 data) {
                         setArgCount(5);
                         break;
                     case 0x38:
+                    case 0x3A:
                         std::printf("[GPU:GP0   ] Draw Shaded Quad (opaque)\n");
 
                         cmdParam.push(data); // Also first argument
@@ -769,6 +794,13 @@ void writeGP0(u32 data) {
 
                         setArgCount(2);
                         break;
+                    case 0x7C:
+                        std::printf("[GPU:GP0   ] Draw Textured Rectangle (16x16, opaque)\n");
+
+                        cmdParam.push(data); // Also first argument
+
+                        setArgCount(2);
+                        break;
                     case 0x80:
                         std::printf("[GPU:GP0   ] Copy Rectangle (VRAM->VRAM)\n");
 
@@ -791,6 +823,11 @@ void writeGP0(u32 data) {
                         break;
                     case 0xE2:
                         std::printf("[GPU:GP0   ] Set Texture Window\n");
+
+                        texWindow.maskX = 8 * ((data >>  0) & 0x1F);
+                        texWindow.maskY = 8 * ((data >>  5) & 0x1F);
+                        texWindow.ofsX  = 8 * ((data >> 10) & 0x1F);
+                        texWindow.ofsY  = 8 * ((data >> 15) & 0x1F);
                         break;
                     case 0xE3:
                         std::printf("[GPU:GP0   ] Set Drawing Area (TL)\n");
@@ -828,14 +865,20 @@ void writeGP0(u32 data) {
             if (!--argCount) {
                 switch (cmd) {
                     case 0x02: fillRect(); break;
-                    case 0x28: drawQuad28(); break;
+                    case 0x28:
+                    case 0x2A:
+                        drawQuad28();
+                        break;
                     case 0x2C:
                     case 0x2D:
                     case 0x2F:
                         drawQuad2C();
                         break;
                     case 0x30: drawTri30(); break;
-                    case 0x38: drawQuad38(); break;
+                    case 0x38:
+                    case 0x3A:
+                        drawQuad38();
+                        break;
                     case 0x60:
                     case 0x62:
                         drawRect60();
@@ -845,6 +888,7 @@ void writeGP0(u32 data) {
                         drawRect65();
                         break;
                     case 0x74: drawRect74(); break;
+                    case 0x7C: drawRect7C(); break;
                     case 0x80: copyVRAMToVRAM(); break;
                     case 0xA0: copyCPUToVRAM(); break;
                     case 0xC0: copyVRAMToCPU(); break;
@@ -927,6 +971,7 @@ void writeGP1(u32 data) {
 
             switch (data & 7) {
                 case 2: // Texture Window
+                    gpuread = ((texWindow.ofsY / 8) << 15) | ((texWindow.ofsX / 8) << 10) | ((texWindow.maskY / 8) << 5) | (texWindow.ofsX / 8);
                     break;
                 case 3:
                     gpuread = (xyarea.y0 << 10) | xyarea.x0;
