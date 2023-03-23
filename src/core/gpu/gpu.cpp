@@ -339,7 +339,7 @@ void drawTexturedRect(const Vertex &v, i32 w, i32 h, u32 clut) {
 
     for (auto y = yMin; y < yMax; y++) {
         for (auto x = xMin; x < xMax; x++) {
-            const auto color = fetchTex((texX + xc) & 0xFF, (texY + yc) & 0xFF, drawMode, clut);
+            const auto color = fetchTex(texX + xc, texY + yc, drawMode, clut);
 
             ++xc;
 
