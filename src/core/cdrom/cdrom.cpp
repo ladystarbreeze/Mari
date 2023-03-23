@@ -39,7 +39,14 @@ enum Command {
     GetTN   = 0x13,
     GetTD   = 0x14,
     SeekL   = 0x15,
+    Test    = 0x19,
     GetID   = 0x1A,
+    ReadTOC  = 0x1E,
+};
+
+/* Sub commands */
+enum SubCommand {
+    GetBIOSDate = 0x20,
 };
 
 /* Seek parameters */
@@ -109,6 +116,8 @@ void sendIRQEvent(int irq) {
         // Send status
         responseFIFO.push(stat);
 
+        readSector();
+
         if (mode & static_cast<u8>(Mode::Speed)) {
             scheduler::addEvent(idSendIRQ, 1, READ_TIME_DOUBLE, false);
         } else {
@@ -157,6 +166,20 @@ u8 readResponse() {
     const auto data = responseFIFO.front(); responseFIFO.pop();
 
     return data;
+}
+
+/* Get BIOS Date */
+void cmdGetBIOSDate() {
+    std::printf("[CDROM     ] Get BIOS Date\n");
+
+    // Send date
+    responseFIFO.push(0x96);
+    responseFIFO.push(0x09);
+    responseFIFO.push(0x12);
+    responseFIFO.push(0xC2);
+
+    // Send INT3
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
 }
 
 /* Get ID - Activate motor, set mode = 0x20, abort all commands */
@@ -224,6 +247,26 @@ void cmdGetTN() {
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+}
+
+/* Read TOC - Reread TOC */
+void cmdReadTOC() {
+    std::printf("[CDROM     ] Read TOC\n");
+
+    // Send status
+    responseFIFO.push(stat);
+
+    stat |= static_cast<u8>(Status::MotorOn);
+    stat |= static_cast<u8>(Status::Read);
+
+    // Send status
+    responseFIFO.push(stat);
+
+    // Send INT3
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+
+    // Send INT2
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME + 20000, true);
 }
 
 /* Init - Activate motor, set mode = 0x20, abort all commands */
@@ -357,6 +400,19 @@ void cmdUnmute() {
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
 }
 
+/* Handles sub commands */
+void doSubCmd() {
+    const auto cmd = paramFIFO.front(); paramFIFO.pop();
+
+    switch (cmd) {
+        case SubCommand::GetBIOSDate: cmdGetBIOSDate(); break;
+        default:
+            std::printf("[CDROM     ] Unhandled sub command 0x%02X\n", cmd);
+
+            exit(0);
+    }
+}
+
 /* Handles CDROM  commands */
 void doCmd(u8 data) {
     cmd = data;
@@ -372,7 +428,9 @@ void doCmd(u8 data) {
         case Command::GetTN  : cmdGetTN(); break;
         case Command::GetTD  : cmdGetTD(); break;
         case Command::SeekL  : cmdSeekL(); break;
+        case Command::Test   : doSubCmd(); break;
         case Command::GetID  : cmdGetID(); break;
+        case Command::ReadTOC: cmdReadTOC(); break;
         default:
             std::printf("[CDROM     ] Unhandled command 0x%02X\n", cmd);
 
@@ -423,7 +481,7 @@ u8 read(u32 addr) {
                     std::printf("[CDROM     ] 8-bit read @ IE\n");
                     return iEnable;
                 case 1:
-                    std::printf("[CDROM     ] 8-bit read @ IF\n");
+                    //std::printf("[CDROM     ] 8-bit read @ IF\n");
                     return iFlags;
                 default:
                     std::printf("[CDROM     ] Unhandled 8-bit read @ 0x%08X.%u\n", addr, index);
@@ -441,7 +499,7 @@ u8 read(u32 addr) {
 void write(u32 addr, u8 data) {
     switch (addr) {
         case 0x1F801800:
-            std::printf("[CDROM     ] 8-bit write @ INDEX = 0x%02X\n", data);
+            //std::printf("[CDROM     ] 8-bit write @ INDEX = 0x%02X\n", data);
 
             index = data & 3;
             break;
@@ -493,10 +551,6 @@ void write(u32 addr, u8 data) {
                     std::printf("[CDROM     ] 8-bit write @ REQUEST = 0x%02X\n", data);
 
                     assert(!(data & (1 << 5)));
-
-                    if (data & (1 << 7)) {
-                        readSector();
-                    }
                     break;
                 case 1:
                     std::printf("[CDROM     ] 8-bit write @ IF = 0x%02X\n", data);
@@ -523,7 +577,7 @@ void write(u32 addr, u8 data) {
 }
 
 u32 getData32() {
-    assert(readIdx < SECTOR_SIZE);
+    assert(readIdx != SECTOR_SIZE);
 
     u32 data;
 
