@@ -332,18 +332,26 @@ void drawTexturedRect(const Vertex &v, i32 w, i32 h, u32 clut) {
     auto xMax = std::min(xMin + w, xyarea.x1);
     auto yMax = std::min(yMin + h, xyarea.y1);
 
+    const u32 texX = (a.tex >> 0) & 0xFF;
+    const u32 texY = (a.tex >> 8) & 0xFF;
+
+    u32 xc = 0, yc = 0;
+
     for (auto y = yMin; y < yMax; y++) {
         for (auto x = xMin; x < xMax; x++) {
-            const u32 texX = ((a.tex >>  0) & 0xFF) + x;
-            const u32 texY = ((a.tex >> 16) & 0xFF) + y;
+            const auto color = fetchTex((texX + xc) & 0xFF, (texY + yc) & 0xFF, drawMode, clut);
 
-            const auto color = fetchTex(texX, texY, drawMode, clut);
+            ++xc;
 
             /* TODO: handle semi-transparency/blending */
             if (!color) continue;
 
             drawPixel<false>(x, y, color);
         }
+
+        xc = 0;
+
+        ++yc;
     }
 }
 
