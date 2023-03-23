@@ -465,7 +465,7 @@ u8 read(u32 addr) {
                 data |= paramFIFO.empty() << 3;        // Parameter FIFO empty
                 data |= (paramFIFO.size() != 16) << 4; // Parameter FIFO not full
                 data |= !responseFIFO.empty() << 5;    // Response FIFO not empty
-                data |= (readIdx != SECTOR_SIZE) << 6; // Data FIFO not empty
+                data |= (readIdx < 0x818) << 6; // Data FIFO not empty
 
                 return data;
             }
