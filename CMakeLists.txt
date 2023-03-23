@@ -4,7 +4,7 @@ project(Mari CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_compile_options(-O1 -Wall -Wextra)
+add_compile_options(-Wall -Wextra)
 
 set(SOURCES
     src/main.cpp
@@ -18,6 +18,7 @@ set(SOURCES
     src/core/cpu/cpu.cpp
     src/core/dmac/dmac.cpp
     src/core/gpu/gpu.cpp
+    src/core/sio/sio.cpp
     src/core/timer/timer.cpp
 )
 
@@ -33,6 +34,7 @@ set(HEADERS
     src/core/cpu/cpu.hpp
     src/core/dmac/dmac.hpp
     src/core/gpu/gpu.hpp
+    src/core/sio/sio.cpp
     src/core/timer/timer.hpp
 )
 
