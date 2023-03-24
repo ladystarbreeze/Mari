@@ -779,6 +779,9 @@ void writeGP0(u32 data) {
 
                         setArgCount(7);
                         break;
+                    case 0x42:
+                        setArgCount(2);
+                        break;
                     case 0x60:
                     case 0x62:
                         std::printf("[GPU:GP0   ] Draw Flat Rectangle (variable)\n");
