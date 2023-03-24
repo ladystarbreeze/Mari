@@ -16,6 +16,7 @@
 #include "cpu/cpu.hpp"
 #include "dmac/dmac.hpp"
 #include "gpu/gpu.hpp"
+#include "sio/sio.hpp"
 #include "timer/timer.hpp"
 
 #include <SDL2/SDL.h>
@@ -61,6 +62,7 @@ void init(const char *biosPath, const char *isoPath) {
     cpu::init();
     dmac::init();
     gpu::init();
+    sio::init();
     timer::init();
 
     initSDL();
@@ -79,12 +81,34 @@ void run() {
 }
 
 void update(const u8 *fb) {
+    const u8 *keyState = SDL_GetKeyboardState(NULL);
+
+    u16 input = 0;
+
     SDL_PollEvent(&e);
 
     switch (e.type) {
-        case SDL_QUIT: isRunning = false; break;
+        case SDL_QUIT   : isRunning = false; break;
+        case SDL_KEYDOWN:
+            if (keyState[SDL_GetScancodeFromKey(SDLK_c)]) input |= 1 <<  0; // SELECT
+            if (keyState[SDL_GetScancodeFromKey(SDLK_v)]) input |= 1 <<  3; // START
+            if (keyState[SDL_GetScancodeFromKey(SDLK_w)]) input |= 1 <<  4; // UP
+            if (keyState[SDL_GetScancodeFromKey(SDLK_d)]) input |= 1 <<  5; // RIGHT
+            if (keyState[SDL_GetScancodeFromKey(SDLK_s)]) input |= 1 <<  6; // DOWN
+            if (keyState[SDL_GetScancodeFromKey(SDLK_a)]) input |= 1 <<  7; // LEFT
+            if (keyState[SDL_GetScancodeFromKey(SDLK_1)]) input |= 1 <<  8; // L2
+            if (keyState[SDL_GetScancodeFromKey(SDLK_3)]) input |= 1 <<  9; // R2
+            if (keyState[SDL_GetScancodeFromKey(SDLK_q)]) input |= 1 << 10; // L2
+            if (keyState[SDL_GetScancodeFromKey(SDLK_e)]) input |= 1 << 11; // R2
+            if (keyState[SDL_GetScancodeFromKey(SDLK_t)]) input |= 1 << 12; // TRIANGLE
+            if (keyState[SDL_GetScancodeFromKey(SDLK_h)]) input |= 1 << 13; // CIRCLE
+            if (keyState[SDL_GetScancodeFromKey(SDLK_g)]) input |= 1 << 14; // CROSS
+            if (keyState[SDL_GetScancodeFromKey(SDLK_f)]) input |= 1 << 15; // SQUARE
+            break;
         default: break;
     }
+
+    sio::setInput(~input);
 
     SDL_UpdateTexture(texture, nullptr, fb, 2 * 1024);
     SDL_RenderCopy(renderer, texture, nullptr, nullptr);
