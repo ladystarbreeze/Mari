@@ -14,6 +14,7 @@
 #include "../bus/bus.hpp"
 #include "../cdrom/cdrom.hpp"
 #include "../gpu/gpu.hpp"
+#include "../mdec/mdec.hpp"
 
 namespace ps::dmac {
 
@@ -214,6 +215,34 @@ void doGPU() {
     chn.size  = 0;
 }
 
+/* Handles MDEC_IN DMA */
+void doMDECIN() {
+    const auto chnID = Channel::MDECIN;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC      ] MDEC_IN transfer\n");
+
+    //assert(chcr.dir); // Always from RAM
+    assert(chcr.mod == Mode::Slice); // Always slice?
+    assert(!chcr.dec); // Always incrementing?
+    assert(chn.len);
+
+    for (int i = 0; i < (int)chn.len; i++) {
+        mdec::writeCmd(bus::read32(chn.madr));
+
+        chn.madr += 4;
+    }
+
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), chn.len, true);
+
+    /* Clear BCR */
+    chn.count = 0;
+    chn.size  = 0;
+    chn.len   = 0;
+}
+
 /* Handles OTC DMA */
 void doOTC() {
     const auto chnID = Channel::OTC;
@@ -270,10 +299,11 @@ void doSPU() {
 
 void startDMA(Channel chn) {
     switch (chn) {
-        case Channel::GPU  : doGPU(); break;
-        case Channel::CDROM: doCDROM(); break;
-        case Channel::SPU  : doSPU(); break;
-        case Channel::OTC  : doOTC(); break;
+        case Channel::MDECIN: doMDECIN(); break;
+        case Channel::GPU   : doGPU(); break;
+        case Channel::CDROM : doCDROM(); break;
+        case Channel::SPU   : doSPU(); break;
+        case Channel::OTC   : doOTC(); break;
         default:
             std::printf("[DMAC      ] Unhandled channel %d (%s) transfer\n", chn, chnNames[static_cast<int>(chn)]);
 
@@ -380,7 +410,51 @@ u32 read(u32 addr) {
     return data;
 }
 
-void write(u32 addr, u32 data) {
+void write8(u32 addr, u8 data) {
+    if (addr < static_cast<u32>(ControlReg::DPCR)) {
+        const auto chnID = static_cast<int>(getChannel(addr));
+
+        auto &chn = channels[chnID];
+
+        switch (addr & ~(0xFF3)) {
+            default:
+                std::printf("[DMAC      ] Unhandled 8-bit channel write @ 0x%08X = 0x%02X\n", addr, data);
+
+                exit(0);
+        }
+    } else {
+        switch (addr & ~3) {
+            case static_cast<u32>(ControlReg::DICR):
+                {
+                    const auto offset = addr & 3;
+
+                    std::printf("[DMAC      ] 8-bit write @ DICR[%u] = 0x%08X\n", offset, data);
+
+                    switch (offset) {
+                        case 1:
+                            dicr.fi  = data & (1 << 7);
+                            break;
+                        case 2:
+                            dicr.im  = data & 0x7F;
+                            dicr.mie = data & (1 << 7);
+                            break;
+                        case 3:
+                            dicr.ip  = (dicr.ip & ~data) & 0x7F;
+                            break;
+                    }
+
+                    checkInterrupt();
+                }
+                break;
+            default:
+                std::printf("[DMAC      ] Unhandled 8-bit control write @ 0x%08X = 0x%02X\n", addr, data);
+
+                exit(0);
+        }
+    }
+}
+
+void write32(u32 addr, u32 data) {
     if (addr < static_cast<u32>(ControlReg::DPCR)) {
         const auto chnID = static_cast<int>(getChannel(addr));
 

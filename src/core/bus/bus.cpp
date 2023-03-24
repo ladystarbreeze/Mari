@@ -11,6 +11,7 @@
 #include "../cdrom/cdrom.hpp"
 #include "../dmac/dmac.hpp"
 #include "../gpu/gpu.hpp"
+#include "../mdec/mdec.hpp"
 #include "../sio/sio.hpp"
 #include "../timer/timer.hpp"
 
@@ -84,6 +85,8 @@ u8 read8(u32 addr) {
         return spram[addr & 0x3FF];
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SIO), static_cast<u32>(MemorySize::SIO))) {
         return sio::read8(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::DMA), static_cast<u32>(MemorySize::DMA))) {
+        return dmac::read(addr & ~3) >> (8 * (addr & 3));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         return bios[addr - static_cast<u32>(MemoryBase::BIOS)];
     } else {
@@ -178,12 +181,8 @@ u32 read32(u32 addr) {
                 //std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
                 gpustat ^= 1 << 31;
                 return gpustat;
-            case 0x1F801820:
-                std::printf("[Bus       ] Unhandled 32-bit read @ MDEC_DATA\n");
-                return 0;
             case 0x1F801824:
-                std::printf("[Bus       ] Unhandled 32-bit read @ MDEC_STAT\n");
-                return 0;
+                return mdec::readStat();
             default:
                 std::printf("[Bus       ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
@@ -212,6 +211,8 @@ void write8(u32 addr, u8 data) {
         spram[addr & 0x3FF] = data;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SIO), static_cast<u32>(MemorySize::SIO))) {
         return sio::write8(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::DMA), static_cast<u32>(MemorySize::DMA))) {
+        return dmac::write8(addr, data);
     } else {
         switch (addr) {
             case 0x1F801800: case 0x1F801801: case 0x1F801802: case 0x1F801803:
@@ -270,7 +271,7 @@ void write32(u32 addr, u32 data) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPRAM), static_cast<u32>(MemorySize::SPRAM))) {
         memcpy(&spram[addr & 0x3FC], &data, sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMA), static_cast<u32>(MemorySize::DMA))) {
-        return dmac::write(addr, data);
+        return dmac::write32(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
         return timer::write(addr, data);
     } else {
@@ -332,11 +333,9 @@ void write32(u32 addr, u32 data) {
                 gpu::writeGP1(data);
                 break;
             case 0x1F801820:
-                std::printf("[Bus       ] Unhandled 32-bit write @ MDEC_CMD = 0x%08X\n", data);
-                break;
+                return mdec::writeCmd(data);
             case 0x1F801824:
-                std::printf("[Bus       ] Unhandled 32-bit write @ MDEC_CTRL = 0x%08X\n", data);
-                break;
+                return mdec::writeCtrl(data);
             case 0x1FFE0130:
                 std::printf("[Bus       ] 32-bit write @ CACHE_CONTROL = 0x%08X\n", data);
                 break;
