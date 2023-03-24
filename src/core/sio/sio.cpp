@@ -19,7 +19,7 @@ using Interrupt = intc::Interrupt;
 
 /* --- SIO constants --- */
 
-constexpr i64 ACK_TIME = 450;
+constexpr i64 ACK_TIME = 3200;
 
 /* --- SIO registers --- */
 
@@ -73,8 +73,6 @@ u64 idSendACK;
 void sendACKEvent(int data) {
     std::printf("[SIO       ] ACK\n");
 
-    joystat.ack = true;
-
     rxFIFO.push(data);
 
     if (joyctrl.airq) {
@@ -103,6 +101,8 @@ u8 read8(u32 addr) {
             }
 
             data = rxFIFO.front(); rxFIFO.pop();
+
+            std::printf("0x%02X\n", data);
             break;
         default:
             std::printf("[SIO       ] Unhandled 8-bit read @ 0x%08X\n", addr);
@@ -118,7 +118,7 @@ u16 read16(u32 addr) {
 
     switch (addr) {
         case static_cast<u32>(SIOReg::JOYSTAT):
-            std::printf("[SIO       ] 16-bit read @ JOY_STAT\n");
+            //std::printf("[SIO       ] 16-bit read @ JOY_STAT\n");
 
             data  = joystat.rdy0;
             data |= joystat.rdy1 << 2;
@@ -152,9 +152,11 @@ void write8(u32 addr, u8 data) {
         case static_cast<u32>(SIOReg::JOYFIFO):
             std::printf("[SIO       ] 8-bit write @ JOY_TX_FIFO = 0x%02X\n", data);
 
+            joystat.ack = false;
+
             switch (state) {
                 case JOYState::Idle:
-                    if ((data == 0x01) && (!joyctrl.slot)) { // Controller, slot 1
+                    if ((data == 0x01) && ((joyctrl.raw & 0x2002) == 2)) { // Controller, slot 1
                         /* Send ACK */
                         scheduler::addEvent(idSendACK, 0xFF, ACK_TIME, true);
 
@@ -163,31 +165,36 @@ void write8(u32 addr, u8 data) {
                         cmdLen = 2;
                     } else {
                         rxFIFO.push(0xFF);
-
-                        state = JOYState::Idle;
                     }
                     break;
                 case JOYState::SendID:
+                    /* Send ACK */
+                    scheduler::addEvent(idSendACK, (cmdLen == 2) ? 0x41 : 0x5A, ACK_TIME, true);
+
                     if (!--cmdLen) {
+                        assert(!data);
+
                         state = JOYState::SendButtons;
 
                         cmdLen = 2;
                     } else {
-                        if (data != 0x41) state = JOYState::Idle;
+                        if (data != 0x42) { // Read command
+                            std::printf("[SIO       ] Unhandled JOY command 0x%02X\n", data);
 
-                        return;
+                            state = JOYState::Idle;
+
+                            return;
+                        }
                     }
-
-                    /* Send ACK */
-                    scheduler::addEvent(idSendACK, (cmdLen) ? 0x41 : 0x51, ACK_TIME, true);
                     break;
                 case JOYState::SendButtons:
+                    assert(!data);
+
+                    scheduler::addEvent(idSendACK, (cmdLen == 2) ? keyState : (keyState >> 8), ACK_TIME, true);
+
                     if (!--cmdLen) {
                         state = JOYState::Idle;
                     }
-
-                    /* Send ACK */
-                    scheduler::addEvent(idSendACK, (cmdLen) ? keyState : keyState >> 8, ACK_TIME, true);
                     break;
                 default:
                     std::printf("[SIO       ] Unhandled JOY state\n");
@@ -220,22 +227,10 @@ void write16(u32 addr, u16 data) {
             joyctrl.rirq = data & (1 << 11);
             joyctrl.airq = data & (1 << 12);
 
-            if (data & (1 << 1)) {
-                joyctrl.slot = false; // if !(/JOYn), slot = false
-                joyctrl.rxen = true;
-            } else {
-                joyctrl.rxen = false;
-            }
-
-            if (data & (1 << 2)) {
-                joyctrl.rxen = true;
-            }
-
             if (data & (1 << 4)) {
                 /* Ack JOY_STAT bits */
-                std::printf("[SIO       ] JOY ACK\n");
+                std::printf("[SIO       ] Acknowledge IRQ\n");
 
-                joystat.ack  = false;
                 joystat.irq = false;
             }
 
@@ -244,7 +239,6 @@ void write16(u32 addr, u16 data) {
 
                 joystat.rdy0 = true;
                 joystat.rdy1 = true;
-                joystat.ack  = false;
                 joystat.irq  = false;
 
                 state = JOYState::Idle;
