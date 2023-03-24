@@ -166,8 +166,11 @@ u16 fetchTex(i32 texX, i32 texY, u32 texPage, u32 clut) {
     u32 x = 0;
 
     switch (depth) {
-        case 4: case 8:
-            x = 64 * texPageX + (texX / depth);
+        case 4:
+            x = 64 * texPageX + (texX / 4);
+            break;
+        case 8:
+            x = 64 * texPageX + (texX / 2);
             break;
         case 16:
             x = 64 * texPageX + texX;
@@ -520,6 +523,33 @@ void drawQuad38() {
     state = GPUState::ReceiveCommand;
 }
 
+/* GP0(0x3E) Draw Shaded Textured Quadrilateral */
+void drawQuad3E() {
+    Vertex v[4];
+
+    for (int i = 0; i < 4; i++) {
+        const auto c0 = cmdParam.front(); cmdParam.pop();
+        const auto v0 = cmdParam.front(); cmdParam.pop();
+        const auto t0 = cmdParam.front(); cmdParam.pop();
+
+        v[i] = Vertex(v0, c0, t0);
+    }
+
+    const auto clut = v[0].tex >> 16;
+
+    u32 texPage;
+    if (edgeFunction(v[0], v[1], v[2]) < 0) {
+        texPage = v[2].tex >> 16;
+    } else {
+        texPage = v[1].tex >> 16;
+    }
+
+    drawTexturedTri(v[0], v[1], v[2], clut, texPage);
+    drawTexturedTri(v[1], v[2], v[3], clut, texPage);
+
+    state = GPUState::ReceiveCommand;
+}
+
 /* GP0(0x60) Draw Flat Rectangle (variable) */
 void drawRect60() {
     const auto c = cmdParam.front(); cmdParam.pop();
@@ -779,6 +809,13 @@ void writeGP0(u32 data) {
 
                         setArgCount(7);
                         break;
+                    case 0x3E:
+                        std::printf("[GPU:GP0   ] Draw Shaded Textured Quad (opaque)\n");
+
+                        cmdParam.push(data); // Also first argument
+
+                        setArgCount(11);
+                        break;
                     case 0x42:
                         setArgCount(2);
                         break;
@@ -792,6 +829,7 @@ void writeGP0(u32 data) {
                         break;
                     case 0x64:
                     case 0x65:
+                    case 0x66:
                         std::printf("[GPU:GP0   ] Draw Textured Rectangle (variable, opaque)\n");
 
                         cmdParam.push(data); // Also first argument
@@ -890,12 +928,16 @@ void writeGP0(u32 data) {
                     case 0x3A:
                         drawQuad38();
                         break;
+                    case 0x3E:
+                        drawQuad3E();
+                        break;
                     case 0x60:
                     case 0x62:
                         drawRect60();
                         break;
                     case 0x64:
                     case 0x65:
+                    case 0x66:
                         drawRect65();
                         break;
                     case 0x74: drawRect74(); break;
