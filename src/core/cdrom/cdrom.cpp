@@ -30,19 +30,22 @@ constexpr i64 INT3_TIME = 10000;
 
 /* CDROM commands */
 enum Command {
-    GetStat = 0x01,
-    SetLoc  = 0x02,
-    ReadN   = 0x06,
-    Pause   = 0x09,
-    Init    = 0x0A,
-    Unmute  = 0x0C,
-    SetMode = 0x0E,
-    GetTN   = 0x13,
-    GetTD   = 0x14,
-    SeekL   = 0x15,
-    Test    = 0x19,
-    GetID   = 0x1A,
-    ReadTOC  = 0x1E,
+    GetStat   = 0x01,
+    SetLoc    = 0x02,
+    ReadN     = 0x06,
+    Pause     = 0x09,
+    Init      = 0x0A,
+    Unmute    = 0x0C,
+    SetFilter = 0x0D,
+    SetMode   = 0x0E,
+    GetLocP   = 0x11,
+    GetTN     = 0x13,
+    GetTD     = 0x14,
+    SeekL     = 0x15,
+    Test      = 0x19,
+    GetID     = 0x1A,
+    ReadS     = 0x1B,
+    ReadTOC   = 0x1E,
 };
 
 /* Sub commands */
@@ -208,6 +211,24 @@ void cmdGetID() {
     scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 30000, true);
 }
 
+/* Get Loc P - Returns position from subchannel Q */
+void cmdGetLocP() {
+    std::printf("[CDROM     ] Get Loc P\n");
+
+    // Send information
+    responseFIFO.push(0x01);
+    responseFIFO.push(0x01);
+    responseFIFO.push(seekParam.mins);
+    responseFIFO.push(seekParam.secs);
+    responseFIFO.push(seekParam.sector);
+    responseFIFO.push(seekParam.mins);
+    responseFIFO.push(seekParam.secs);
+    responseFIFO.push(seekParam.sector);
+
+    // Send INT3
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+}
+
 /* Get Stat - Activate motor, set mode = 0x20, abort all commands */
 void cmdGetStat() {
     std::printf("[CDROM     ] Get Stat\n");
@@ -361,6 +382,19 @@ void cmdSeekL() {
     scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 80000, true);
 }
 
+/* Set Filter - Sets XA filter */
+void cmdSetFilter() {
+    std::printf("[CDROM     ] Set Filter\n");
+
+    paramFIFO.pop(); paramFIFO.pop();
+
+    // Send status
+    responseFIFO.push(stat);
+
+    // Send INT3
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+}
+
 /* Set Loc - Sets seek parameters */
 void cmdSetLoc() {
     std::printf("[CDROM     ] Set Loc\n");
@@ -419,19 +453,22 @@ void doCmd(u8 data) {
     cmd = data;
 
     switch (cmd) {
-        case Command::GetStat: cmdGetStat(); break;
-        case Command::SetLoc : cmdSetLoc(); break;
-        case Command::ReadN  : cmdReadN(); break;
-        case Command::Pause  : cmdPause(); break;
-        case Command::Init   : cmdInit(); break;
-        case Command::Unmute : cmdUnmute(); break;
-        case Command::SetMode: cmdSetMode(); break;
-        case Command::GetTN  : cmdGetTN(); break;
-        case Command::GetTD  : cmdGetTD(); break;
-        case Command::SeekL  : cmdSeekL(); break;
-        case Command::Test   : doSubCmd(); break;
-        case Command::GetID  : cmdGetID(); break;
-        case Command::ReadTOC: cmdReadTOC(); break;
+        case Command::GetStat  : cmdGetStat(); break;
+        case Command::SetLoc   : cmdSetLoc(); break;
+        case Command::ReadN    : cmdReadN(); break;
+        case Command::Pause    : cmdPause(); break;
+        case Command::Init     : cmdInit(); break;
+        case Command::Unmute   : cmdUnmute(); break;
+        case Command::SetFilter: cmdSetFilter(); break;
+        case Command::SetMode  : cmdSetMode(); break;
+        case Command::GetLocP  : cmdGetLocP(); break;
+        case Command::GetTN    : cmdGetTN(); break;
+        case Command::GetTD    : cmdGetTD(); break;
+        case Command::SeekL    : cmdSeekL(); break;
+        case Command::Test     : doSubCmd(); break;
+        case Command::GetID    : cmdGetID(); break;
+        case Command::ReadS    : cmdReadN(); break; // Should be fine?
+        case Command::ReadTOC  : cmdReadTOC(); break;
         default:
             std::printf("[CDROM     ] Unhandled command 0x%02X\n", cmd);
 
