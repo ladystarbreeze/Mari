@@ -9,7 +9,11 @@
 #include <cstdio>
 #include <cstring>
 
+#include "../dmac/dmac.hpp"
+
 namespace ps::mdec {
+
+using Channel = dmac::Channel;
 
 /* --- MDEC constants --- */
 
@@ -25,6 +29,7 @@ enum Command {
 
 enum MDECState {
     Idle,
+    ReceiveMacroblock,
     ReceiveQuantTables,
     ReceiveScaleTable,
 };
@@ -32,14 +37,16 @@ enum MDECState {
 /* --- MDEC registers --- */
 
 struct MDECStatus {
-    u16  rem;  // Words remaining
-    u8   blk;  // Current block
-    bool b15;  // Bit 15 set/clear (15-bit depth only)
-    bool sign; // Signed
-    u8   dep;  // Output depth
-    bool oreq; // Output request
-    bool ireq; // Input request
+    u16  rem;   // Words remaining
+    u8   blk;   // Current block
+    bool b15;   // Bit 15 set/clear (15-bit depth only)
+    bool sign;  // Signed
+    u8   dep;   // Output depth
+    bool oreq;  // Output request
+    bool ireq;  // Input request
     bool busy;
+    bool empty; // Out FIFO empty
+    bool full;  // In FIFO full/last word received
 };
 
 MDECStatus stat;
@@ -57,19 +64,20 @@ int cmdLen;
 MDECState state = MDECState::Idle;
 
 u32 readStat() {
-    std::printf("[MDEC      ] 32-bit read @ MDEC0\n");
+    //std::printf("[MDEC      ] 32-bit read @ MDEC0\n");
 
     u32 data;
 
     data  = stat.rem;
-    data |= stat.blk  << 16;
-    data |= stat.b15  << 23;
-    data |= stat.sign << 24;
-    data |= stat.dep  << 25;
-    data |= stat.oreq << 27;
-    data |= stat.ireq << 28;
-    data |= stat.busy << 29;
-    data |= 1         << 31;
+    data |= stat.blk   << 16;
+    data |= stat.b15   << 23;
+    data |= stat.sign  << 24;
+    data |= stat.dep   << 25;
+    data |= stat.oreq  << 27;
+    data |= stat.ireq  << 28;
+    data |= stat.busy  << 29;
+    data |= stat.full  << 30;
+    data |= stat.empty << 31;
 
     return data;
 }
@@ -93,6 +101,13 @@ void writeCmd(u32 data) {
 
                         stat.rem = data;
                         return;
+                    case Command::DecodeMacroblock: // TODO: handle this
+                        std::printf("[MDEC      ] Decode Macroblock\n");
+
+                        cmdLen = data & 0xFFFF;
+
+                        state = MDECState::ReceiveMacroblock;
+                        break;
                     case Command::SetQuantTables:
                         std::printf("[MDEC      ] Set Quant Tables\n");
 
@@ -120,6 +135,24 @@ void writeCmd(u32 data) {
                 stat.busy = true;
             }
             break;
+        case MDECState::ReceiveMacroblock:
+            if (!--cmdLen) {
+                stat.rem  = 0xFFFF;
+                stat.busy = false;
+
+                /* Clear MDEC_IN request, set MDEC_OUT request */
+
+                stat.full = true;
+                stat.ireq = true;
+
+                stat.empty = false;
+                stat.oreq  = true;
+
+                dmac::setDRQ(Channel::MDECOUT, true);
+
+                state = MDECState::Idle;
+            }
+            break;
         case MDECState::ReceiveQuantTables:
             assert(quantIdx < 128);
 
@@ -128,7 +161,10 @@ void writeCmd(u32 data) {
             quantIdx += 4;
 
             if (!--cmdLen) {
+                stat.rem  = 0;
                 stat.busy = false;
+
+
 
                 state = MDECState::Idle;
             }
