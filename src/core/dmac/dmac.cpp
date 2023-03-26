@@ -237,6 +237,9 @@ void doMDECIN() {
 
     scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), chn.len, true);
 
+    /* Clear DRQ */
+    chn.drq = false;
+
     /* Clear BCR */
     chn.count = 0;
     chn.size  = 0;
@@ -366,6 +369,10 @@ u32 read(u32 addr) {
         auto &chn = channels[chnID];
 
         switch (addr & ~(0xFF0)) {
+            case static_cast<u32>(ChannelReg::MADR):
+                //std::printf("[DMAC      ] 32-bit read @ D%d_MADR\n", chnID);
+
+                return chn.madr;
             case static_cast<u32>(ChannelReg::CHCR):
                 {
                     auto &chcr = chn.chcr;
