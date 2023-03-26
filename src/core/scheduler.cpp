@@ -81,6 +81,8 @@ void processEvents(i64 elapsedCycles) {
 
     if (cycleCount < cyclesUntilNextEvent) return;
 
+    const auto oldCycles = cyclesUntilNextEvent;
+
     for (auto event = events.begin(); event != events.end();) {
         event->cyclesUntilEvent -= cycleCount;
 
@@ -97,7 +99,7 @@ void processEvents(i64 elapsedCycles) {
         }
     }
 
-    cycleCount -= cyclesUntilNextEvent;
+    cycleCount -= oldCycles;
 
     reschedule();
 }
