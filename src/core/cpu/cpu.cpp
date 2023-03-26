@@ -100,6 +100,7 @@ enum SPECIALOpcode {
     DIVU    = 0x1B,
     ADD     = 0x20,
     ADDU    = 0x21,
+    SUB     = 0x22,
     SUBU    = 0x23,
     AND     = 0x24,
     OR      = 0x25,
@@ -330,7 +331,7 @@ void iADD(u32 instr) {
      * an arithmetic overflow occurred
      */
     if (!((regs[rs] ^ regs[rt]) & (1 << 31)) && ((regs[rs] ^ res) & (1 << 31))) {
-        std::printf("[CPU       ] ADDI: Unhandled Arithmetic Overflow\n");
+        std::printf("[CPU       ] ADD: Unhandled Arithmetic Overflow\n");
 
         exit(0);
     }
@@ -764,6 +765,7 @@ void iMFC(int copN, u32 instr) {
 
     switch (copN) {
         case 0: data = cop0::get(rd); break;
+        case 2: data = 0; break; // TODO: implement GTE
         default:
             std::printf("[CPU       ] MFC: Unhandled coprocessor %d\n", copN);
 
@@ -1107,6 +1109,30 @@ void iSRLV(u32 instr) {
     }
 }
 
+/* SUBtract */
+void iSUB(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = regs[rs] - regs[rt];
+
+    /* If rs and imm have different signs and rs and the result have a different sign,
+     * an arithmetic overflow occurred
+     */
+    if (((regs[rs] ^ regs[rt]) & (1 << 31)) && ((regs[rs] ^ res) & (1 << 31))) {
+        std::printf("[CPU       ] SUB: Unhandled Arithmetic Overflow\n");
+
+        exit(0);
+    }
+
+    set(rd, res);
+
+    if (doDisasm) {
+        std::printf("[CPU       ] SUB %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
+    }
+}
+
 /* SUBtract Unsigned */
 void iSUBU(u32 instr) {
     const auto rd = getRd(instr);
@@ -1136,6 +1162,40 @@ void iSW(u32 instr) {
 
     if (addr & 3) {
         std::printf("[CPU       ] SW: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+
+        exit(0);
+    }
+
+    if (cop0::isCacheIsolated()) return;
+
+    write32(addr, data);
+}
+
+/* Store Word Coprocessor */
+void iSWC(int copN, u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+
+    u32 data;
+
+    switch (copN) {
+        case 2: data = 0; break;
+        default:
+            std::printf("[CPU       ] SWC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    if (doDisasm) {
+        std::printf("[CPU       ] SWC%d %d, 0x%X(%s); [0x%08X] = 0x%08X\n", copN, rt, imm, regNames[rs], addr, data);
+    }
+
+    if (addr & 3) {
+        std::printf("[CPU       ] SWC: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
         exit(0);
     }
@@ -1251,6 +1311,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::DIVU   : iDIVU(instr); break;
                     case SPECIALOpcode::ADD    : iADD(instr); break;
                     case SPECIALOpcode::ADDU   : iADDU(instr); break;
+                    case SPECIALOpcode::SUB    : iSUB(instr); break;
                     case SPECIALOpcode::SUBU   : iSUBU(instr); break;
                     case SPECIALOpcode::AND    : iAND(instr); break;
                     case SPECIALOpcode::OR     : iOR(instr); break;
@@ -1321,6 +1382,18 @@ void decodeInstr(u32 instr) {
             }
             break;
         case Opcode::COP2:
+            {
+                const auto rs = getRs(instr);
+
+                switch (rs) {
+                    case COPOpcode::MF: iMFC(2, instr); break;
+                    default:
+                        //std::printf("[CPU       ] Unhandled COP2 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
+
+                        //exit(0);
+                        break;
+                }
+            }
             break;
         case Opcode::LB : iLB(instr); break;
         case Opcode::LH : iLH(instr); break;
@@ -1334,7 +1407,8 @@ void decodeInstr(u32 instr) {
         case Opcode::SWL: iSWL(instr); break;
         case Opcode::SW : iSW(instr); break;
         case Opcode::SWR: iSWR(instr); break;
-        case 0x32: case 0x3A: break;
+        case 0x32: break;
+        case 0x3A: iSWC(2, instr); break;
         default:
             std::printf("[CPU       ] Unhandled instruction 0x%02X (0x%08X) @ 0x%08X\n", opcode, instr, cpc);
 
