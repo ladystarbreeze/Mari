@@ -449,6 +449,19 @@ void fillRect() {
 	state = GPUState::ReceiveCommand;
 }
 
+/* GP0(0x20) Draw Flat Tri (opaque) */
+void drawTri20() {
+    const auto color = cmdParam.front(); cmdParam.pop();
+
+    const auto v0 = cmdParam.front(); cmdParam.pop();
+    const auto v1 = cmdParam.front(); cmdParam.pop();
+    const auto v2 = cmdParam.front(); cmdParam.pop();
+
+    drawFlatTri(Vertex(v0), Vertex(v1), Vertex(v2), color);
+
+    state = GPUState::ReceiveCommand;
+}
+
 /* GP0(0x30) Draw Shaded Triangle (opaque) */
 void drawTri30() {
     const auto c0 = cmdParam.front(); cmdParam.pop();
@@ -592,6 +605,18 @@ void drawRect74() {
     const auto clut = v0.tex >> 16;
 
     drawTexturedRect(v0, 8, 8, clut);
+
+    state = GPUState::ReceiveCommand;
+}
+
+/* GP0(0x78) Draw Flat Rectangle (8x8) */
+void drawRect78() {
+    const auto c = cmdParam.front(); cmdParam.pop();
+    const auto v = cmdParam.front(); cmdParam.pop();
+
+    Vertex v0 = Vertex(v, c);
+
+    drawFlatRect(v0, 8, 8, c);
 
     state = GPUState::ReceiveCommand;
 }
@@ -777,6 +802,14 @@ void writeGP0(u32 data) {
 
                         setArgCount(2);
                         break;
+                    case 0x20:
+                    case 0x22:
+                        std::printf("[GPU:GP0   ] Draw Flat Tri (opaque)\n");
+
+                        cmdParam.push(data); // Also first argument
+
+                        setArgCount(3);
+                        break;
                     case 0x28:
                     case 0x2A:
                         std::printf("[GPU:GP0   ] Draw Flat Quad (opaque)\n");
@@ -795,6 +828,7 @@ void writeGP0(u32 data) {
                         setArgCount(8);
                         break;
                     case 0x30:
+                    case 0x32:
                         std::printf("[GPU:GP0   ] Draw Shaded Tri (opaque)\n");
 
                         cmdParam.push(data); // Also first argument
@@ -816,6 +850,7 @@ void writeGP0(u32 data) {
 
                         setArgCount(11);
                         break;
+                    case 0x40:
                     case 0x42:
                         setArgCount(2);
                         break;
@@ -835,6 +870,13 @@ void writeGP0(u32 data) {
                         cmdParam.push(data); // Also first argument
 
                         setArgCount(3);
+                        break;
+                    case 0x78:
+                        std::printf("[GPU:GP0   ] Draw Flat Rectangle (8x8)\n");
+
+                        cmdParam.push(data); // Also first argument
+
+                        setArgCount(1);
                         break;
                     case 0x74:
                         std::printf("[GPU:GP0   ] Draw Textured Rectangle (8x8, opaque)\n");
@@ -899,6 +941,9 @@ void writeGP0(u32 data) {
                     case 0xE6:
                         std::printf("[GPU:GP0   ] Set Mask Bit\n");
                         break;
+                    case 0xFF: // ???
+                        std::printf("[GPU:GP0   ] Invalid command 0x%02X (0x%08X)\n", cmd, data);
+                        break;
                     default:
                         std::printf("[GPU       ] Unhandled GP0 command 0x%02X (0x%08X)\n", cmd, data);
 
@@ -914,6 +959,10 @@ void writeGP0(u32 data) {
             if (!--argCount) {
                 switch (cmd) {
                     case 0x02: fillRect(); break;
+                    case 0x20:
+                    case 0x22:
+                        drawTri20();
+                        break;
                     case 0x28:
                     case 0x2A:
                         drawQuad28();
@@ -923,7 +972,10 @@ void writeGP0(u32 data) {
                     case 0x2F:
                         drawQuad2C();
                         break;
-                    case 0x30: drawTri30(); break;
+                    case 0x30:
+                    case 0x32:
+                        drawTri30();
+                        break;
                     case 0x38:
                     case 0x3A:
                         drawQuad38();
@@ -941,6 +993,7 @@ void writeGP0(u32 data) {
                         drawRect65();
                         break;
                     case 0x74: drawRect74(); break;
+                    case 0x78: drawRect78(); break;
                     case 0x7C: drawRect7C(); break;
                     case 0x80: copyVRAMToVRAM(); break;
                     case 0xA0: copyCPUToVRAM(); break;
