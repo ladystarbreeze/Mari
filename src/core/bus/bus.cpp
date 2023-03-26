@@ -107,6 +107,8 @@ u16 read16(u32 addr) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::SPRAM), static_cast<u32>(MemorySize::SPRAM))) {
+        std::memcpy(&data, &spram[addr & 0x3FE], sizeof(u16));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SIO), static_cast<u32>(MemorySize::SIO))) {
         return sio::read16(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
@@ -120,7 +122,8 @@ u16 read16(u32 addr) {
                 std::printf("[Bus       ] 16-bit read @ 0x%08X (SPU_CNT)\n", addr);
                 return spuCnt;
             default:
-                std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X (SPU)\n", addr);
+                //std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X (SPU)\n", addr);
+                break;
         }
 
         return 0;
@@ -143,8 +146,6 @@ u16 read16(u32 addr) {
 
     return data;
 }
-
-u32 gpustat = 7 << 26;
 
 /* Reads a word from the system bus */
 u32 read32(u32 addr) {
@@ -179,8 +180,7 @@ u32 read32(u32 addr) {
                 return gpu::readGPUREAD();
             case 0x1F801814:
                 //std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
-                gpustat ^= 1 << 31;
-                return gpustat;
+                return gpu::readStatus();
             case 0x1F801824:
                 return mdec::readStat();
             default:
@@ -228,7 +228,9 @@ void write8(u32 addr, u8 data) {
 /* Writes a halfword to the system bus */
 void write16(u32 addr, u16 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
-        memcpy(&ram[addr], &data, sizeof(u16));
+        std::memcpy(&ram[addr], &data, sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::SPRAM), static_cast<u32>(MemorySize::SPRAM))) {
+        std::memcpy(&spram[addr & 0x3FE], &data, sizeof(u16));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SIO), static_cast<u32>(MemorySize::SIO))) {
         return sio::write16(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
@@ -246,7 +248,8 @@ void write16(u32 addr, u16 data) {
                 spuCnt = data;
                 break;
             default:
-                std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X (SPU) = 0x%04X\n", addr, data);
+                //std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X (SPU) = 0x%04X\n", addr, data);
+                break;
         }
     } else {
         switch (addr) {
@@ -267,9 +270,9 @@ void write16(u32 addr, u16 data) {
 /* Writes a word to the system bus */
 void write32(u32 addr, u32 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
-        memcpy(&ram[addr], &data, sizeof(u32));
+        std::memcpy(&ram[addr], &data, sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPRAM), static_cast<u32>(MemorySize::SPRAM))) {
-        memcpy(&spram[addr & 0x3FC], &data, sizeof(u32));
+        std::memcpy(&spram[addr & 0x3FC], &data, sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMA), static_cast<u32>(MemorySize::DMA))) {
         return dmac::write32(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
