@@ -42,6 +42,7 @@ enum Command {
     GetTN     = 0x13,
     GetTD     = 0x14,
     SeekL     = 0x15,
+    SeekP     = 0x16,
     Test      = 0x19,
     GetID     = 0x1A,
     ReadS     = 0x1B,
@@ -465,6 +466,7 @@ void doCmd(u8 data) {
         case Command::GetTN    : cmdGetTN(); break;
         case Command::GetTD    : cmdGetTD(); break;
         case Command::SeekL    : cmdSeekL(); break;
+        case Command::SeekP    : cmdSeekL(); break; // Should be fine?
         case Command::Test     : doSubCmd(); break;
         case Command::GetID    : cmdGetID(); break;
         case Command::ReadS    : cmdReadN(); break; // Should be fine?
