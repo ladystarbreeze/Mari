@@ -75,6 +75,10 @@ void sendACKEvent(int data) {
 
     rxFIFO.push(data);
 
+    joystat.rdy0 = true;
+    joystat.rdy1 = true;
+    joystat.ack  = true;
+
     if (joyctrl.airq) {
         joystat.irq = true;
 
@@ -126,6 +130,8 @@ u16 read16(u32 addr) {
             data |= joystat.irq  << 9;
 
             if (rxFIFO.size()) data |= 1 << 1;
+
+            joystat.ack = false;
             break;
         case static_cast<u32>(SIOReg::JOYCTRL):
             std::printf("[SIO       ] 16-bit read @ JOY_CTRL\n");
@@ -157,7 +163,8 @@ void write8(u32 addr, u8 data) {
         case static_cast<u32>(SIOReg::JOYFIFO):
             std::printf("[SIO       ] 8-bit write @ JOY_TX_FIFO = 0x%02X\n", data);
 
-            joystat.ack = false;
+            joystat.rdy0 = false;
+            joystat.rdy1 = false;
 
             switch (state) {
                 case JOYState::Idle:
@@ -170,6 +177,9 @@ void write8(u32 addr, u8 data) {
                         cmdLen = 2;
                     } else {
                         rxFIFO.push(0xFF);
+
+                        joystat.rdy0 = true;
+                        joystat.rdy1 = true;
                     }
                     break;
                 case JOYState::SendID:
@@ -252,6 +262,14 @@ void write16(u32 addr, u16 data) {
             }
 
             joyctrl.slot = data & (1 << 13);
+
+            if (!data) {
+                std::printf("[SIO       ] JOY time-out\n");
+
+                state = JOYState::Idle;
+
+                while (rxFIFO.size()) rxFIFO.pop();
+            }
             break;
         case static_cast<u32>(SIOReg::JOYBAUD):
             std::printf("[SIO       ] 16-bit write @ JOY_BAUD = 0x%04X\n", data);
