@@ -93,6 +93,7 @@ i64 lineCounter = 0;
 u32 drawMode;
 
 u32 gpuread = 0;
+u32 gpustat = 7 << 26;
 
 u64 idHBLANK, idScanline; // Scheduler
 
@@ -802,6 +803,13 @@ void writeGP0(u32 data) {
 
                         setArgCount(2);
                         break;
+                    case 0x1F:
+                        std::printf("[GPU:GP0   ] Request Interrupt (0x%08X)\n", data);
+
+                        gpustat |= 1 << 24;
+
+                        intc::sendInterrupt(Interrupt::GPU);
+                        break;
                     case 0x20:
                     case 0x22:
                         std::printf("[GPU:GP0   ] Draw Flat Tri (opaque)\n");
@@ -812,6 +820,7 @@ void writeGP0(u32 data) {
                         break;
                     case 0x28:
                     case 0x2A:
+                    case 0x2B:
                         std::printf("[GPU:GP0   ] Draw Flat Quad (opaque)\n");
 
                         cmdParam.push(data); // Also first argument
@@ -820,6 +829,7 @@ void writeGP0(u32 data) {
                         break;
                     case 0x2C:
                     case 0x2D:
+                    case 0x2E:
                     case 0x2F:
                         std::printf("[GPU:GP0   ] Draw Textured Quad (semi-transparent, blended)\n");
 
@@ -843,6 +853,7 @@ void writeGP0(u32 data) {
 
                         setArgCount(7);
                         break;
+                    case 0x3C:
                     case 0x3E:
                         std::printf("[GPU:GP0   ] Draw Shaded Textured Quad (opaque)\n");
 
@@ -886,7 +897,8 @@ void writeGP0(u32 data) {
                         setArgCount(2);
                         break;
                     case 0x7C:
-                        std::printf("[GPU:GP0   ] Draw Textured Rectangle (16x16, opaque)\n");
+                    case 0x7D:
+                        std::printf("[GPU:GP0   ] Draw Textured Rectangle (16x16)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -965,10 +977,12 @@ void writeGP0(u32 data) {
                         break;
                     case 0x28:
                     case 0x2A:
+                    case 0x2B:
                         drawQuad28();
                         break;
                     case 0x2C:
                     case 0x2D:
+                    case 0x2E:
                     case 0x2F:
                         drawQuad2C();
                         break;
@@ -980,6 +994,7 @@ void writeGP0(u32 data) {
                     case 0x3A:
                         drawQuad38();
                         break;
+                    case 0x3C:
                     case 0x3E:
                         drawQuad3E();
                         break;
@@ -994,7 +1009,10 @@ void writeGP0(u32 data) {
                         break;
                     case 0x74: drawRect74(); break;
                     case 0x78: drawRect78(); break;
-                    case 0x7C: drawRect7C(); break;
+                    case 0x7C:
+                    case 0x7D:
+                        drawRect7C();
+                        break;
                     case 0x80: copyVRAMToVRAM(); break;
                     case 0xA0: copyCPUToVRAM(); break;
                     case 0xC0: copyVRAMToCPU(); break;
@@ -1039,6 +1057,12 @@ void writeGP0(u32 data) {
         default:
             exit(0);
     }
+}
+
+u32 readStatus() {
+    gpustat ^= 1 << 31;
+
+    return gpustat;
 }
 
 void writeGP1(u32 data) {
