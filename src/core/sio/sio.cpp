@@ -138,6 +138,11 @@ u16 read16(u32 addr) {
             data |= joyctrl.airq << 12;
             data |= joyctrl.slot << 13;
             break;
+        case static_cast<u32>(SIOReg::JOYBAUD):
+            std::printf("[SIO       ] 16-bit read @ JOY_BAUD\n");
+
+            data = 0x0088;
+            break;
         default:
             std::printf("[SIO       ] Unhandled 16-bit read @ 0x%08X\n", addr);
 
