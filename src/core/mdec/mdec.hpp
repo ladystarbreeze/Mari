@@ -11,6 +11,7 @@ namespace ps::mdec {
 
 void init();
 
+u32 readData();
 u32 readStat();
 
 void writeCmd(u32 data);

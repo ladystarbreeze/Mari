@@ -63,6 +63,12 @@ int cmdLen;
 
 MDECState state = MDECState::Idle;
 
+u32 readData() {
+    //std::printf("[MDEC      ] 32-bit read @ MDEC1\n");
+
+    return 0;
+}
+
 u32 readStat() {
     //std::printf("[MDEC      ] 32-bit read @ MDEC0\n");
 
@@ -133,6 +139,8 @@ void writeCmd(u32 data) {
                 }
 
                 stat.busy = true;
+
+                //dmac::setDRQ(Channel::MDECIN, true);
             }
             break;
         case MDECState::ReceiveMacroblock:
@@ -143,7 +151,7 @@ void writeCmd(u32 data) {
                 /* Clear MDEC_IN request, set MDEC_OUT request */
 
                 stat.full = true;
-                stat.ireq = true;
+                stat.ireq = false;
 
                 stat.empty = false;
                 stat.oreq  = true;
@@ -156,15 +164,17 @@ void writeCmd(u32 data) {
         case MDECState::ReceiveQuantTables:
             assert(quantIdx < 128);
 
+            //std::printf("%d, %d\n", quantIdx, cmdLen);
+
             std::memcpy(&quantTable[quantIdx], &data, 4);
 
             quantIdx += 4;
 
             if (!--cmdLen) {
-                stat.rem  = 0;
+                //std::printf("Done\n");
+
+                stat.rem  = 0xFFFF;
                 stat.busy = false;
-
-
 
                 state = MDECState::Idle;
             }
@@ -177,6 +187,7 @@ void writeCmd(u32 data) {
             scaleIdx += 2;
 
             if (!--cmdLen) {
+                stat.rem  = 0xFFFF;
                 stat.busy = false;
 
                 state = MDECState::Idle;
