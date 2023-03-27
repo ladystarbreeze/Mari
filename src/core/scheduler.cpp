@@ -75,7 +75,7 @@ void removeEvent(u64 id) {
 }
 
 void processEvents(i64 elapsedCycles) {
-    if (events.empty()) return;
+    assert(!events.empty());
 
     cycleCount += elapsedCycles;
 
