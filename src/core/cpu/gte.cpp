@@ -27,9 +27,13 @@ enum Opcode {
     NCLIP = 0x06,
     MVMVA = 0x12,
     NCDS  = 0x13,
+    SQR   = 0x28,
     AVSZ3 = 0x2D,
     AVSZ4 = 0x2E,
     RTPT  = 0x30,
+    GPF   = 0x3D,
+    GPL   = 0x3E,
+    NCCT  = 0x3F,
 };
 
 /* --- GTE registers --- */
@@ -131,9 +135,24 @@ u32 get(u32 idx) {
         case GTEReg::SXY2:
             //std::printf("[GTE       ] Read @ SXY2\n");
             return sxy[2];
+        case GTEReg::SZ0:
+            //std::printf("[GTE       ] Read @ SXY0\n");
+            return sz[0];
+        case GTEReg::SZ1:
+            //std::printf("[GTE       ] Read @ SXY1\n");
+            return sz[1];
+        case GTEReg::SZ2:
+            //std::printf("[GTE       ] Read @ SXY2\n");
+            return sz[2];
         case GTEReg::SZ3:
             //std::printf("[GTE       ] Read @ SXY3\n");
             return sz[3];
+        case GTEReg::RGB0:
+            //std::printf("[GTE       ] Read @ RGB0\n");
+            return rgb[0];
+        case GTEReg::RGB1:
+            //std::printf("[GTE       ] Read @ RGB1\n");
+            return rgb[1];
         case GTEReg::RGB2:
             //std::printf("[GTE       ] Read @ RGB2\n");
             return rgb[2];
@@ -656,6 +675,50 @@ void iAVSZ4() {
     //std::printf("[GTE:AVSZ4 ] OTZ = 0x%04x\n", otz);
 }
 
+/* General purpose interpolation */
+void iGPF(u32 cmd) {
+    const bool lm = cmd & (1 << 10);
+    const bool sf = cmd & (1 << 19);
+    
+    const auto shift = 12 * sf;
+
+    for (int i = 1; i < 4; i++) setMACIR(i, (i64)ir[i] * (i64)ir[0], shift, lm);
+
+    /* Calculate and push color/code */
+
+    u8 col[4];
+
+    for (int i = 0; i < 3; i++) col[i] = satCol(i, mac[i + 1] >> 4);
+
+    col[3] = rgbc[3];
+
+    pushRGB(col);
+
+    //std::printf("[GTE:GPF   ] RGB2 = 0x%08x\n", rgb[2]);
+}
+
+/* General purpose interpolation with base */
+void iGPL(u32 cmd) {
+    const bool lm = cmd & (1 << 10);
+    const bool sf = cmd & (1 << 19);
+    
+    const auto shift = 12 * sf;
+
+    for (int i = 1; i < 4; i++) setMACIR(i, ((i64)ir[i] * (i64)ir[0] + mac[i]) << shift, shift, lm);
+
+    /* Calculate and push color/code */
+
+    u8 col[4];
+
+    for (int i = 0; i < 3; i++) col[i] = satCol(i, mac[i + 1] >> 4);
+
+    col[3] = rgbc[3];
+
+    pushRGB(col);
+
+    //std::printf("[GTE:GPL   ] RGB2 = 0x%08x\n", rgb[2]);
+}
+
 /* Vector-matrix multiply with vector add */
 void iMVMVA(u32 cmd) {
     const bool lm = cmd & (1 << 10);
@@ -744,6 +807,36 @@ void iMVMVA(u32 cmd) {
     }
 
     mulMVT(m, vtx, vt, shift, lm);
+}
+
+/* Normal Color Color(??) Triple */
+void iNCCT(u32 cmd) {
+    //std::printf("[GTE       ] NCCT\n");
+
+    const bool lm = cmd & (1 << 10);
+    const bool sf = cmd & (1 << 19);
+    
+    const auto shift = 12 * sf;
+
+    for (int i = 0; i < 3; i++) {
+        mulMV(ls, v[i], shift, lm);
+
+        Vec16 vtx = { ir[1], ir[2], ir[3] };
+
+        mulMVT(lc, vtx, bk, shift, lm);
+
+        /* Calculate and push color/code */
+
+        u8 col[4];
+
+        for (int j = 0; j < 3; j++) col[j] = satCol(i, mac[j + 1] >> 4);
+
+        col[3] = rgbc[3];
+
+        pushRGB(col);
+
+        //std::printf("[GTE:NCCT  ] RGB2 = 0x%08x\n", rgb[2]);
+    }
 }
 
 /* Normal Color Depth cue Single */
@@ -899,6 +992,17 @@ void iRTPT(u32 cmd) {
     }
 }
 
+/* SQuare Root */
+void iSQR(u32 cmd) {
+    const bool lm = cmd & (1 << 10);
+    const bool sf = cmd & (1 << 19);
+    
+    const auto shift = 12 * sf;
+
+    for (int i = 1; i < 4; i++) mac[i] = ((i32)ir[i] * (i32)ir[i]) >> shift;
+    for (int i = 1; i < 4; i++) setIR(i, mac[i], lm);
+}
+
 void doCmd(u32 cmd) {
     const auto opcode = cmd & 0x3F;
 
@@ -907,9 +1011,13 @@ void doCmd(u32 cmd) {
         case Opcode::NCLIP: iNCLIP(); break;
         case Opcode::MVMVA: iMVMVA(cmd); break;
         case Opcode::NCDS : iNCDS(cmd); break;
+        case Opcode::SQR  : iSQR(cmd); break;
         case Opcode::AVSZ3: iAVSZ3(); break;
         case Opcode::AVSZ4: iAVSZ4(); break;
         case Opcode::RTPT : iRTPT(cmd); break;
+        case Opcode::GPF  : iGPF(cmd); break;
+        case Opcode::GPL  : iGPL(cmd); break;
+        case Opcode::NCCT : iNCCT(cmd); break;
         default:
             std::printf("[GTE       ] Unhandled instruction 0x%02X (0x%07X)\n", opcode, cmd);
 
