@@ -246,6 +246,37 @@ void doMDECIN() {
     chn.len   = 0;
 }
 
+/* Handles MDEC_OUT DMA */
+void doMDECOUT() {
+    const auto chnID = Channel::MDECOUT;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC      ] MDEC_OUT transfer\n");
+
+    //assert(chcr.dir); // Always from RAM
+    assert(chcr.mod == Mode::Slice); // Always slice?
+    assert(!chcr.dec); // Always incrementing?
+    assert(chn.len);
+
+    for (int i = 0; i < (int)chn.len; i++) {
+        //bus::write32(chn.madr, mdec::readData());
+
+        chn.madr += 4;
+    }
+
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), chn.len, true);
+
+    /* Clear DRQ */
+    chn.drq = false;
+
+    /* Clear BCR */
+    chn.count = 0;
+    chn.size  = 0;
+    chn.len   = 0;
+}
+
 /* Handles OTC DMA */
 void doOTC() {
     const auto chnID = Channel::OTC;
@@ -302,11 +333,12 @@ void doSPU() {
 
 void startDMA(Channel chn) {
     switch (chn) {
-        case Channel::MDECIN: doMDECIN(); break;
-        case Channel::GPU   : doGPU(); break;
-        case Channel::CDROM : doCDROM(); break;
-        case Channel::SPU   : doSPU(); break;
-        case Channel::OTC   : doOTC(); break;
+        case Channel::MDECIN : doMDECIN(); break;
+        case Channel::MDECOUT: doMDECOUT(); break;
+        case Channel::GPU    : doGPU(); break;
+        case Channel::CDROM  : doCDROM(); break;
+        case Channel::SPU    : doSPU(); break;
+        case Channel::OTC    : doOTC(); break;
         default:
             std::printf("[DMAC      ] Unhandled channel %d (%s) transfer\n", chn, chnNames[static_cast<int>(chn)]);
 
@@ -510,7 +542,7 @@ void write32(u32 addr, u32 data) {
 
                 dpcr = data;
 
-                checkRunningAll();
+                //checkRunningAll();
                 break;
             case static_cast<u32>(ControlReg::DICR):
                 std::printf("[DMAC      ] 32-bit write @ DICR = 0x%08X\n", data);
