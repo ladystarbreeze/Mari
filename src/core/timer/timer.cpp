@@ -101,7 +101,7 @@ u16 read(u32 addr) {
             return timer.count;
         case TimerReg::MODE:
             {
-                std::printf("[Timer     ] 16-bit read @ T%d_MODE\n", chn);
+                //std::printf("[Timer     ] 16-bit read @ T%d_MODE\n", chn);
                 
                 auto &mode = timer.mode;
 
