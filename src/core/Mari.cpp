@@ -25,10 +25,6 @@
 
 namespace ps {
 
-/* --- Mari constants --- */
-
-constexpr i64 RUN_CYCLES = 64;
-
 /* SDL2 */
 SDL_Renderer *renderer;
 SDL_Window *window;
@@ -72,11 +68,15 @@ void init(const char *biosPath, const char *isoPath) {
 
 void run() {
     while (isRunning) {
-        cpu::step(RUN_CYCLES >> 1); // 2 cycles per instruction
+        const auto runCycles = scheduler::getRunCycles();
 
-        timer::step(RUN_CYCLES);
+        scheduler::processEvents(runCycles);
 
-        scheduler::processEvents(RUN_CYCLES);
+        cpu::step(runCycles >> 1); // 2 cycles per instruction
+
+        timer::step(runCycles);
+
+        scheduler::flush();
     }
 
     SDL_Quit();

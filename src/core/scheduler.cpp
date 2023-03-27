@@ -5,6 +5,7 @@
 
 #include "scheduler.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <deque>
@@ -12,6 +13,10 @@
 #include <vector>
 
 namespace ps::scheduler {
+
+/* --- Scheduler constants --- */
+
+constexpr i64 MAX_RUN_CYCLES = 64;
 
 /* Scheduler event */
 struct Event {
@@ -40,10 +45,14 @@ void reschedule() {
 }
 
 void init() {
-    cycleCount = cyclesUntilNextEvent = 0;
+    cycleCount = 0;
+
+    cyclesUntilNextEvent = INT64_MAX;
 }
 
 void flush() {
+    if (nextEvents.empty()) return reschedule();
+
     while (!nextEvents.empty()) { events.push_back(nextEvents.front()); nextEvents.pop(); }
 
     reschedule();
@@ -81,14 +90,14 @@ void removeEvent(u64 id) {
 void processEvents(i64 elapsedCycles) {
     assert(!events.empty());
 
-    cycleCount += elapsedCycles;
-
-    if (cycleCount < cyclesUntilNextEvent) return;
+    cyclesUntilNextEvent -= elapsedCycles;
 
     for (auto event = events.begin(); event != events.end();) {
-        event->cyclesUntilEvent -= cycleCount;
+        event->cyclesUntilEvent -= elapsedCycles;
 
-        if (event->cyclesUntilEvent <= 0) {
+        assert(event->cyclesUntilEvent >= 0);
+
+        if (!event->cyclesUntilEvent) {
             const auto id = event->id;
             const auto param = event->param;
             const auto cyclesUntilEvent = event->cyclesUntilEvent;
@@ -100,10 +109,10 @@ void processEvents(i64 elapsedCycles) {
             event++;
         }
     }
+}
 
-    cycleCount -= cyclesUntilNextEvent;
-
-    flush();
+i64 getRunCycles() {
+    return std::min((i64)MAX_RUN_CYCLES, cyclesUntilNextEvent);
 }
 
 }

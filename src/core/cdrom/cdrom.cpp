@@ -331,9 +331,9 @@ void cmdPause() {
 
     /* Pause is faster if drive is already paused */
     if (!(stat & (static_cast<u8>(Status::Play) | static_cast<u8>(Status::Read)))) {
-        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 10000);
+        scheduler::addEvent(idSendIRQ, 2, INT3_TIME);
     } else {
-        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 5 * READ_TIME_SINGLE);
+        scheduler::addEvent(idSendIRQ, 2, 5 * READ_TIME_SINGLE);
     }
 
     /* Pause drive */
