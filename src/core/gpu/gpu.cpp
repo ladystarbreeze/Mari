@@ -791,20 +791,20 @@ void writeGP0(u32 data) {
 
                 switch (cmd) {
                     case 0x00:
-                        std::printf("[GPU:GP0   ] NOP\n");
+                        //std::printf("[GPU:GP0   ] NOP\n");
                         break;
                     case 0x01:
-                        std::printf("[GPU:GP0   ] Clear Cache\n");
+                        //std::printf("[GPU:GP0   ] Clear Cache\n");
                         break;
                     case 0x02:
-                        std::printf("[GPU:GP0   ] Fill VRAM\n");
+                        //std::printf("[GPU:GP0   ] Fill VRAM\n");
 
                         cmdParam.push(data); // Also first argument
 
                         setArgCount(2);
                         break;
                     case 0x1F:
-                        std::printf("[GPU:GP0   ] Request Interrupt (0x%08X)\n", data);
+                        //std::printf("[GPU:GP0   ] Request Interrupt (0x%08X)\n", data);
 
                         gpustat |= 1 << 24;
 
@@ -812,7 +812,7 @@ void writeGP0(u32 data) {
                         break;
                     case 0x20:
                     case 0x22:
-                        std::printf("[GPU:GP0   ] Draw Flat Tri (opaque)\n");
+                        //std::printf("[GPU:GP0   ] Draw Flat Tri (opaque)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -821,7 +821,7 @@ void writeGP0(u32 data) {
                     case 0x28:
                     case 0x2A:
                     case 0x2B:
-                        std::printf("[GPU:GP0   ] Draw Flat Quad (opaque)\n");
+                        //std::printf("[GPU:GP0   ] Draw Flat Quad (opaque)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -831,7 +831,7 @@ void writeGP0(u32 data) {
                     case 0x2D:
                     case 0x2E:
                     case 0x2F:
-                        std::printf("[GPU:GP0   ] Draw Textured Quad (semi-transparent, blended)\n");
+                        //std::printf("[GPU:GP0   ] Draw Textured Quad (semi-transparent, blended)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -839,7 +839,7 @@ void writeGP0(u32 data) {
                         break;
                     case 0x30:
                     case 0x32:
-                        std::printf("[GPU:GP0   ] Draw Shaded Tri (opaque)\n");
+                        //std::printf("[GPU:GP0   ] Draw Shaded Tri (opaque)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -847,7 +847,7 @@ void writeGP0(u32 data) {
                         break;
                     case 0x38:
                     case 0x3A:
-                        std::printf("[GPU:GP0   ] Draw Shaded Quad (opaque)\n");
+                        //std::printf("[GPU:GP0   ] Draw Shaded Quad (opaque)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -855,7 +855,7 @@ void writeGP0(u32 data) {
                         break;
                     case 0x3C:
                     case 0x3E:
-                        std::printf("[GPU:GP0   ] Draw Shaded Textured Quad (opaque)\n");
+                        //std::printf("[GPU:GP0   ] Draw Shaded Textured Quad (opaque)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -867,7 +867,7 @@ void writeGP0(u32 data) {
                         break;
                     case 0x60:
                     case 0x62:
-                        std::printf("[GPU:GP0   ] Draw Flat Rectangle (variable)\n");
+                        //std::printf("[GPU:GP0   ] Draw Flat Rectangle (variable)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -876,21 +876,21 @@ void writeGP0(u32 data) {
                     case 0x64:
                     case 0x65:
                     case 0x66:
-                        std::printf("[GPU:GP0   ] Draw Textured Rectangle (variable, opaque)\n");
+                        //std::printf("[GPU:GP0   ] Draw Textured Rectangle (variable, opaque)\n");
 
                         cmdParam.push(data); // Also first argument
 
                         setArgCount(3);
                         break;
                     case 0x78:
-                        std::printf("[GPU:GP0   ] Draw Flat Rectangle (8x8)\n");
+                        //std::printf("[GPU:GP0   ] Draw Flat Rectangle (8x8)\n");
 
                         cmdParam.push(data); // Also first argument
 
                         setArgCount(1);
                         break;
                     case 0x74:
-                        std::printf("[GPU:GP0   ] Draw Textured Rectangle (8x8, opaque)\n");
+                        //std::printf("[GPU:GP0   ] Draw Textured Rectangle (8x8, opaque)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -898,7 +898,7 @@ void writeGP0(u32 data) {
                         break;
                     case 0x7C:
                     case 0x7D:
-                        std::printf("[GPU:GP0   ] Draw Textured Rectangle (16x16)\n");
+                        //std::printf("[GPU:GP0   ] Draw Textured Rectangle (16x16)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -906,28 +906,28 @@ void writeGP0(u32 data) {
                         break;
                     case 0x80:
                     case 0x8E:
-                        std::printf("[GPU:GP0   ] Copy Rectangle (VRAM->VRAM)\n");
+                        //std::printf("[GPU:GP0   ] Copy Rectangle (VRAM->VRAM)\n");
 
                         setArgCount(3);
                         break;
                     case 0xA0:
                     case 0xB1:
-                        std::printf("[GPU:GP0   ] Copy Rectangle (CPU->VRAM)\n");
+                        //std::printf("[GPU:GP0   ] Copy Rectangle (CPU->VRAM)\n");
 
                         setArgCount(2);
                         break;
                     case 0xC0:
-                        std::printf("[GPU:GP0   ] Copy Rectangle (VRAM->CPU)\n");
+                        //std::printf("[GPU:GP0   ] Copy Rectangle (VRAM->CPU)\n");
 
                         setArgCount(2);
                         break;
                     case 0xE1:
-                        std::printf("[GPU:GP0   ] Set Draw Mode\n");
+                        //std::printf("[GPU:GP0   ] Set Draw Mode\n");
 
                         drawMode = data & 0xFFFFFF;
                         break;
                     case 0xE2:
-                        std::printf("[GPU:GP0   ] Set Texture Window\n");
+                        //std::printf("[GPU:GP0   ] Set Texture Window\n");
 
                         texWindow.maskX = 8 * ((data >>  0) & 0x1F);
                         texWindow.maskY = 8 * ((data >>  5) & 0x1F);
@@ -935,29 +935,29 @@ void writeGP0(u32 data) {
                         texWindow.ofsY  = 8 * ((data >> 15) & 0x1F);
                         break;
                     case 0xE3:
-                        std::printf("[GPU:GP0   ] Set Drawing Area (TL)\n");
+                        //std::printf("[GPU:GP0   ] Set Drawing Area (TL)\n");
 
                         xyarea.x0 = (data >>  0) & 0x3FF;
                         xyarea.y0 = (data >> 10) & 0x1FF;
                         break;
                     case 0xE4:
-                        std::printf("[GPU:GP0   ] Set Drawing Area (BR)\n");
+                        //std::printf("[GPU:GP0   ] Set Drawing Area (BR)\n");
 
                         xyarea.x1 = (data >>  0) & 0x3FF;
                         xyarea.y1 = (data >> 10) & 0x1FF;
                         break;
                     case 0xE5:
-                        std::printf("[GPU:GP0   ] Set Drawing Offset\n");
+                        //std::printf("[GPU:GP0   ] Set Drawing Offset\n");
 
                         xyoffset.xofs = ((i32)(((data >>  0) & 0x7FF) << 21) >> 21);
                         xyoffset.yofs = ((i32)(((data >> 11) & 0x7FF) << 21) >> 21);
                         break;
                     case 0xE6:
-                        std::printf("[GPU:GP0   ] Set Mask Bit\n");
+                        //std::printf("[GPU:GP0   ] Set Mask Bit\n");
                         break;
                     case 0x06:
                     case 0xFF: // ???
-                        std::printf("[GPU:GP0   ] Invalid command 0x%02X (0x%08X)\n", cmd, data);
+                        //std::printf("[GPU:GP0   ] Invalid command 0x%02X (0x%08X)\n", cmd, data);
                         break;
                     default:
                         std::printf("[GPU       ] Unhandled GP0 command 0x%02X (0x%08X)\n", cmd, data);
@@ -967,7 +967,7 @@ void writeGP0(u32 data) {
             }
             break;
         case GPUState::ReceiveArguments:
-            //std::printf("[GPU:GP0   ] 0x%08X\n", data);
+            ////std::printf("[GPU:GP0   ] 0x%08X\n", data);
 
             cmdParam.push(data);
 
@@ -1036,7 +1036,7 @@ void writeGP0(u32 data) {
             {
                 auto &c = dstCopyInfo;
 
-                //std::printf("[GPU:GP0   ] [0x%08X] = 0x%04X\n", c.cx + 1024 * c.cy, data & 0xFFFF);
+                ////std::printf("[GPU:GP0   ] [0x%08X] = 0x%04X\n", c.cx + 1024 * c.cy, data & 0xFFFF);
 
                 vram[c.cx + 1024 * c.cy] = data;
 
@@ -1048,7 +1048,7 @@ void writeGP0(u32 data) {
                     c.cx = c.xMin;
                 }
 
-                //std::printf("[GPU:GP0   ] [0x%08X] = 0x%04X\n", c.cx + 1024 * c.cy, data >> 16);
+                ////std::printf("[GPU:GP0   ] [0x%08X] = 0x%04X\n", c.cx + 1024 * c.cy, data >> 16);
 
                 vram[c.cx + 1024 * c.cy] = data >> 16;
 
@@ -1079,34 +1079,34 @@ void writeGP1(u32 data) {
 
     switch (cmd) {
         case 0x00:
-            std::printf("[GPU:GP1   ] Reset GPU\n");
+            //std::printf("[GPU:GP1   ] Reset GPU\n");
             break;
         case 0x01:
-            std::printf("[GPU:GP1   ] Reset Command Buffer\n");
+            //std::printf("[GPU:GP1   ] Reset Command Buffer\n");
             break;
         case 0x02:
-            std::printf("[GPU:GP1   ] Ack GPU Interrupt\n");
+            //std::printf("[GPU:GP1   ] Ack GPU Interrupt\n");
             break;
         case 0x03:
-            std::printf("[GPU:GP1   ] Enable Display\n");
+            //std::printf("[GPU:GP1   ] Enable Display\n");
             break;
         case 0x04:
-            std::printf("[GPU:GP1   ] Set DMA Direction\n");
+            //std::printf("[GPU:GP1   ] Set DMA Direction\n");
             break;
         case 0x05:
-            std::printf("[GPU:GP1   ] Set Display Area\n");
+            //std::printf("[GPU:GP1   ] Set Display Area\n");
             break;
         case 0x06:
-            std::printf("[GPU:GP1   ] Set Horizontal Range\n");
+            //std::printf("[GPU:GP1   ] Set Horizontal Range\n");
             break;
         case 0x07:
-            std::printf("[GPU:GP1   ] Set Vertical Range\n");
+            //std::printf("[GPU:GP1   ] Set Vertical Range\n");
             break;
         case 0x08:
-            std::printf("[GPU:GP1   ] Set Display Mode\n");
+            //std::printf("[GPU:GP1   ] Set Display Mode\n");
             break;
         case 0x10:
-            std::printf("[GPU:GP1   ] Get GPU Info\n");
+            //std::printf("[GPU:GP1   ] Get GPU Info\n");
 
             switch (data & 7) {
                 case 2: // Texture Window

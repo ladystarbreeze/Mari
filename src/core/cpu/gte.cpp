@@ -687,7 +687,7 @@ void doCmd(u32 cmd) {
         case Opcode::AVSZ3: iAVSZ3(); break;
         case Opcode::RTPT : iRTPT(cmd); break;
         default:
-            //std::printf("[GTE       ] Unhandled instruction 0x%02X (0x%07X)\n", opcode, cmd);
+            std::printf("[GTE       ] Unhandled instruction 0x%02X (0x%07X)\n", opcode, cmd);
 
             exit(0);
     }

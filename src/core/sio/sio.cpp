@@ -71,7 +71,7 @@ std::queue<u8> rxFIFO;
 u64 idSendACK;
 
 void sendACKEvent(int data) {
-    std::printf("[SIO       ] ACK\n");
+    //std::printf("[SIO       ] ACK\n");
 
     rxFIFO.push(data);
 
@@ -96,10 +96,10 @@ u8 read8(u32 addr) {
 
     switch (addr) {
         case static_cast<u32>(SIOReg::JOYFIFO):
-            std::printf("[SIO       ] 8-bit read @ JOY_RX_FIFO\n");
+            //std::printf("[SIO       ] 8-bit read @ JOY_RX_FIFO\n");
 
             if (rxFIFO.empty()) {
-                std::printf("RX FIFO is empty!\n");
+                //std::printf("RX FIFO is empty!\n");
 
                 return 0xFF;
             }
@@ -120,7 +120,7 @@ u16 read16(u32 addr) {
 
     switch (addr) {
         case static_cast<u32>(SIOReg::JOYSTAT):
-            //std::printf("[SIO       ] 16-bit read @ JOY_STAT\n");
+            ////std::printf("[SIO       ] 16-bit read @ JOY_STAT\n");
 
             data  = joystat.rdy0;
             data |= joystat.rdy1 << 2;
@@ -132,7 +132,7 @@ u16 read16(u32 addr) {
             joystat.ack = false;
             break;
         case static_cast<u32>(SIOReg::JOYCTRL):
-            std::printf("[SIO       ] 16-bit read @ JOY_CTRL\n");
+            //std::printf("[SIO       ] 16-bit read @ JOY_CTRL\n");
 
             data  = joyctrl.txen;
             data |= joyctrl.rxen << 1;
@@ -143,7 +143,7 @@ u16 read16(u32 addr) {
             data |= joyctrl.slot << 13;
             break;
         case static_cast<u32>(SIOReg::JOYBAUD):
-            std::printf("[SIO       ] 16-bit read @ JOY_BAUD\n");
+            //std::printf("[SIO       ] 16-bit read @ JOY_BAUD\n");
 
             data = 0x0088;
             break;
@@ -159,7 +159,7 @@ u16 read16(u32 addr) {
 void write8(u32 addr, u8 data) {
     switch (addr) {
         case static_cast<u32>(SIOReg::JOYFIFO):
-            std::printf("[SIO       ] 8-bit write @ JOY_TX_FIFO = 0x%02X\n", data);
+            //std::printf("[SIO       ] 8-bit write @ JOY_TX_FIFO = 0x%02X\n", data);
 
             joystat.rdy0 = false;
             joystat.rdy1 = false;
@@ -192,7 +192,7 @@ void write8(u32 addr, u8 data) {
                         cmdLen = 2;
                     } else {
                         if (data != 0x42) { // Read command
-                            std::printf("[SIO       ] Unhandled JOY command 0x%02X\n", data);
+                            //std::printf("[SIO       ] Unhandled JOY command 0x%02X\n", data);
 
                             state = JOYState::Idle;
 
@@ -225,12 +225,12 @@ void write8(u32 addr, u8 data) {
 void write16(u32 addr, u16 data) {
     switch (addr) {
         case static_cast<u32>(SIOReg::JOYMODE):
-            std::printf("[SIO       ] 16-bit write @ JOY_MODE = 0x%04X\n", data);
+            //std::printf("[SIO       ] 16-bit write @ JOY_MODE = 0x%04X\n", data);
 
             assert(data == 0x000D);
             break;
         case static_cast<u32>(SIOReg::JOYCTRL):
-            std::printf("[SIO       ] 16-bit write @ JOY_CTRL = 0x%04X\n", data);
+            //std::printf("[SIO       ] 16-bit write @ JOY_CTRL = 0x%04X\n", data);
 
             joyctrl.raw = data;
 
@@ -242,13 +242,13 @@ void write16(u32 addr, u16 data) {
 
             if (data & (1 << 4)) {
                 /* Ack JOY_STAT bits */
-                std::printf("[SIO       ] Acknowledge IRQ\n");
+                //std::printf("[SIO       ] Acknowledge IRQ\n");
 
                 joystat.irq = false;
             }
 
             if (data & (1 << 6)) {
-                std::printf("[SIO       ] JOY reset\n");
+                //std::printf("[SIO       ] JOY reset\n");
 
                 joystat.rdy0 = true;
                 joystat.rdy1 = true;
@@ -262,7 +262,7 @@ void write16(u32 addr, u16 data) {
             joyctrl.slot = data & (1 << 13);
 
             if (!data) {
-                std::printf("[SIO       ] JOY time-out\n");
+                //std::printf("[SIO       ] JOY time-out\n");
 
                 state = JOYState::Idle;
 
@@ -270,7 +270,7 @@ void write16(u32 addr, u16 data) {
             }
             break;
         case static_cast<u32>(SIOReg::JOYBAUD):
-            std::printf("[SIO       ] 16-bit write @ JOY_BAUD = 0x%04X\n", data);
+            //std::printf("[SIO       ] 16-bit write @ JOY_BAUD = 0x%04X\n", data);
 
             assert(data == 0x0088);
             break;
