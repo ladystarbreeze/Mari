@@ -10,7 +10,7 @@
 #include <cstring>
 
 #include "cop0.hpp"
-
+#include "gte.hpp"
 #include "../bus/bus.hpp"
 
 namespace ps::cpu {
@@ -78,6 +78,8 @@ enum Opcode {
     SWL     = 0x2A,
     SW      = 0x2B,
     SWR     = 0x2E,
+    LWC2    = 0x32,
+    SWC2    = 0x3A,
 };
 
 enum SPECIALOpcode {
@@ -117,7 +119,9 @@ enum REGIMMOpcode {
 
 enum COPOpcode {
     MF  = 0x00,
+    CF  = 0x02,
     MT  = 0x04,
+    CT  = 0x06,
     CO  = 0x10,
 };
 
@@ -508,6 +512,56 @@ void iBNE(u32 instr) {
     }
 }
 
+/* Coprocessor move From Control */
+void iCFC(int copN, u32 instr) {
+    assert((copN >= 0) && (copN < 4));
+
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    /* TODO: add COP usable check */
+
+    u32 data;
+
+    switch (copN) {
+        case 2: data = gte::getControl(rd); break;
+        default:
+            std::printf("[CPU       ] CFC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    set(rt, data);
+
+    if (doDisasm) {
+        std::printf("[CPU       ] CFC%d %s, %d; %s = 0x%08X\n", copN, regNames[rt], rd, regNames[rt], regs[rt]);
+    }
+}
+
+/* Coprocessor move To Control */
+void iCTC(int copN, u32 instr) {
+    assert((copN >= 0) && (copN < 4));
+
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    /* TODO: add COP usable check */
+
+    const auto data = regs[rt];
+
+    switch (copN) {
+        case 2: gte::setControl(rd, data); break;
+        default:
+            std::printf("[CPU       ] CTC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    if (doDisasm) {
+        std::printf("[CPU       ] CTC%d %s, %d; %d = 0x%08X\n", copN, regNames[rt], rd, rd, regs[rt]);
+    }
+}
+
 /* DIVide */
 void iDIV(u32 instr) {
     const auto rs = getRs(instr);
@@ -714,6 +768,38 @@ void iLW(u32 instr) {
     set(rt, read32(addr));
 }
 
+/* Load Word Coprocessor */
+void iLWC(int copN, u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+
+    if (doDisasm) {
+        std::printf("[CPU       ] LWC%d %u, 0x%X(%s); %u = [0x%08X]\n", copN, rt, imm, regNames[rs], rt, addr);
+    }
+
+    if (addr & 3) {
+        std::printf("[CPU       ] LWC: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+
+        exit(0);
+    }
+
+    assert(!cop0::isCacheIsolated());
+
+    const auto data = read32(addr);
+
+    switch (copN) {
+        case 2: gte::set(rt, data); break;
+        default:
+            std::printf("[CPU       ] LWC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+}
+
 /* Load Word Left */
 void iLWL(u32 instr) {
     const auto rs = getRs(instr);
@@ -765,7 +851,7 @@ void iMFC(int copN, u32 instr) {
 
     switch (copN) {
         case 0: data = cop0::get(rd); break;
-        case 2: data = 0; break; // TODO: implement GTE
+        case 2: data = gte::get(rd); break;
         default:
             std::printf("[CPU       ] MFC: Unhandled coprocessor %d\n", copN);
 
@@ -814,6 +900,7 @@ void iMTC(int copN, u32 instr) {
 
     switch (copN) {
         case 0: cop0::set(rd, data); break;
+        case 2: gte::set(rd, data); break;
         default:
             std::printf("[CPU       ] MTC: Unhandled coprocessor %d\n", copN);
 
@@ -1183,7 +1270,7 @@ void iSWC(int copN, u32 instr) {
     u32 data;
 
     switch (copN) {
-        case 2: data = 0; break;
+        case 2: data = gte::get(rt); break;
         default:
             std::printf("[CPU       ] SWC: Unhandled coprocessor %d\n", copN);
 
@@ -1385,30 +1472,36 @@ void decodeInstr(u32 instr) {
             {
                 const auto rs = getRs(instr);
 
-                switch (rs) {
-                    case COPOpcode::MF: iMFC(2, instr); break;
-                    default:
-                        //std::printf("[CPU       ] Unhandled COP2 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
+                if (rs >= COPOpcode::CO) {
+                    gte::doCmd(instr & 0x1FFFFFF);
+                } else {
+                    switch (rs) {
+                        case COPOpcode::MF: iMFC(2, instr); break;
+                        case COPOpcode::CF: iCFC(2, instr); break;
+                        case COPOpcode::MT: iMTC(2, instr); break;
+                        case COPOpcode::CT: iCTC(2, instr); break;
+                        default:
+                            std::printf("[CPU       ] Unhandled COP2 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
 
-                        //exit(0);
-                        break;
+                            exit(0);
+                    }
                 }
             }
             break;
-        case Opcode::LB : iLB(instr); break;
-        case Opcode::LH : iLH(instr); break;
-        case Opcode::LWL: iLWL(instr); break;
-        case Opcode::LW : iLW(instr); break;
-        case Opcode::LBU: iLBU(instr); break;
-        case Opcode::LHU: iLHU(instr); break;
-        case Opcode::LWR: iLWR(instr); break;
-        case Opcode::SB : iSB(instr); break;
-        case Opcode::SH : iSH(instr); break;
-        case Opcode::SWL: iSWL(instr); break;
-        case Opcode::SW : iSW(instr); break;
-        case Opcode::SWR: iSWR(instr); break;
-        case 0x32: break;
-        case 0x3A: iSWC(2, instr); break;
+        case Opcode::LB  : iLB(instr); break;
+        case Opcode::LH  : iLH(instr); break;
+        case Opcode::LWL : iLWL(instr); break;
+        case Opcode::LW  : iLW(instr); break;
+        case Opcode::LBU : iLBU(instr); break;
+        case Opcode::LHU : iLHU(instr); break;
+        case Opcode::LWR : iLWR(instr); break;
+        case Opcode::SB  : iSB(instr); break;
+        case Opcode::SH  : iSH(instr); break;
+        case Opcode::SWL : iSWL(instr); break;
+        case Opcode::SW  : iSW(instr); break;
+        case Opcode::SWR : iSWR(instr); break;
+        case Opcode::LWC2: iLWC(2, instr); break;
+        case Opcode::SWC2: iSWC(2, instr); break;
         default:
             std::printf("[CPU       ] Unhandled instruction 0x%02X (0x%08X) @ 0x%08X\n", opcode, instr, cpc);
 
