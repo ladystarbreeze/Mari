@@ -19,7 +19,7 @@ using Interrupt = intc::Interrupt;
 
 /* --- SIO constants --- */
 
-constexpr i64 ACK_TIME = 3200;
+constexpr i64 ACK_TIME = 8 * 0x88;
 
 /* --- SIO registers --- */
 
@@ -105,8 +105,6 @@ u8 read8(u32 addr) {
             }
 
             data = rxFIFO.front(); rxFIFO.pop();
-
-            std::printf("0x%02X\n", data);
             break;
         default:
             std::printf("[SIO       ] Unhandled 8-bit read @ 0x%08X\n", addr);
@@ -170,7 +168,7 @@ void write8(u32 addr, u8 data) {
                 case JOYState::Idle:
                     if ((data == 0x01) && ((joyctrl.raw & 0x2002) == 2)) { // Controller, slot 1
                         /* Send ACK */
-                        scheduler::addEvent(idSendACK, 0xFF, ACK_TIME, true);
+                        scheduler::addEvent(idSendACK, 0xFF, ACK_TIME);
 
                         state = JOYState::SendID;
 
@@ -184,7 +182,7 @@ void write8(u32 addr, u8 data) {
                     break;
                 case JOYState::SendID:
                     /* Send ACK */
-                    scheduler::addEvent(idSendACK, (cmdLen == 2) ? 0x41 : 0x5A, ACK_TIME, true);
+                    scheduler::addEvent(idSendACK, (cmdLen == 2) ? 0x41 : 0x5A, ACK_TIME);
 
                     if (!--cmdLen) {
                         assert(!data);
@@ -205,7 +203,7 @@ void write8(u32 addr, u8 data) {
                 case JOYState::SendButtons:
                     assert(!data);
 
-                    scheduler::addEvent(idSendACK, (cmdLen == 2) ? keyState : (keyState >> 8), ACK_TIME, true);
+                    scheduler::addEvent(idSendACK, (cmdLen == 2) ? keyState : (keyState >> 8), ACK_TIME);
 
                     if (!--cmdLen) {
                         state = JOYState::Idle;
@@ -284,8 +282,6 @@ void write16(u32 addr, u16 data) {
 }
 
 void setInput(u16 input) {
-    std::printf("[SIO       ] INPUT = 0x%08X\n", input);
-    
     keyState = input;
 }
 

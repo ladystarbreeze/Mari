@@ -65,6 +65,8 @@ void init(const char *biosPath, const char *isoPath) {
     sio::init();
     timer::init();
 
+    scheduler::flush();
+
     initSDL();
 }
 

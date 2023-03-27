@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cstdio>
 #include <deque>
+#include <queue>
 #include <vector>
 
 namespace ps::scheduler {
@@ -20,7 +21,8 @@ struct Event {
     i64 cyclesUntilEvent;
 };
 
-std::deque<Event> events; // Event queue
+std::deque<Event> events;     // Event queue
+std::queue<Event> nextEvents;
 
 std::vector<std::function<void(int, i64)>> registeredFuncs;
 
@@ -41,6 +43,12 @@ void init() {
     cycleCount = cyclesUntilNextEvent = 0;
 }
 
+void flush() {
+    while (!nextEvents.empty()) { events.push_back(nextEvents.front()); nextEvents.pop(); }
+
+    reschedule();
+}
+
 /* Registers an event, returns event ID */
 u64 registerEvent(std::function<void(int, i64)> func) {
     static u64 idPool;
@@ -51,14 +59,12 @@ u64 registerEvent(std::function<void(int, i64)> func) {
 }
 
 /* Adds a scheduler event */
-void addEvent(u64 id, int param, i64 cyclesUntilEvent, bool doReschedule) {
+void addEvent(u64 id, int param, i64 cyclesUntilEvent) {
     assert(cyclesUntilEvent >= 0);
 
     //std::printf("[Scheduler ] Adding event %llu, cycles until event: %lld\n", id, cyclesUntilEvent);
 
-    events.push_front(Event{id, param, cyclesUntilEvent});
-
-    if (doReschedule) reschedule();
+    nextEvents.emplace(Event{id, param, cyclesUntilEvent});
 }
 
 /* Removes all scheduler events of a certain ID */
@@ -70,8 +76,6 @@ void removeEvent(u64 id) {
             event++;
         }
     }
-
-    reschedule();
 }
 
 void processEvents(i64 elapsedCycles) {
@@ -80,8 +84,6 @@ void processEvents(i64 elapsedCycles) {
     cycleCount += elapsedCycles;
 
     if (cycleCount < cyclesUntilNextEvent) return;
-
-    const auto oldCycles = cyclesUntilNextEvent;
 
     for (auto event = events.begin(); event != events.end();) {
         event->cyclesUntilEvent -= cycleCount;
@@ -99,9 +101,9 @@ void processEvents(i64 elapsedCycles) {
         }
     }
 
-    cycleCount -= oldCycles;
+    cycleCount -= cyclesUntilNextEvent;
 
-    reschedule();
+    flush();
 }
 
 }

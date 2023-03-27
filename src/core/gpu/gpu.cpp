@@ -101,7 +101,7 @@ u64 idHBLANK, idScanline; // Scheduler
 void hblankEvent(i64 c) {
     timer::stepHBLANK();
 
-    scheduler::addEvent(idHBLANK, 0, CYCLES_PER_SCANLINE + c, false);
+    scheduler::addEvent(idHBLANK, 0, CYCLES_PER_SCANLINE + c);
 }
 
 /* Handles scanline events */
@@ -120,7 +120,7 @@ void scanlineEvent(i64 c) {
         lineCounter = 0;
     }
     
-    scheduler::addEvent(idScanline, 0, CYCLES_PER_SCANLINE + c, false);
+    scheduler::addEvent(idScanline, 0, CYCLES_PER_SCANLINE + c);
 }
 
 void setArgCount(int c) {
@@ -741,8 +741,8 @@ void init() {
 
     vram.resize(VRAM_WIDTH * VRAM_HEIGHT);
 
-    scheduler::addEvent(idHBLANK, 0, CYCLES_PER_HDRAW, false);
-    scheduler::addEvent(idScanline, 0, CYCLES_PER_SCANLINE, true);
+    scheduler::addEvent(idHBLANK, 0, CYCLES_PER_HDRAW);
+    scheduler::addEvent(idScanline, 0, CYCLES_PER_SCANLINE);
 }
 
 u32 readGPUREAD() {
@@ -905,11 +905,13 @@ void writeGP0(u32 data) {
                         setArgCount(2);
                         break;
                     case 0x80:
+                    case 0x8E:
                         std::printf("[GPU:GP0   ] Copy Rectangle (VRAM->VRAM)\n");
 
                         setArgCount(3);
                         break;
                     case 0xA0:
+                    case 0xB1:
                         std::printf("[GPU:GP0   ] Copy Rectangle (CPU->VRAM)\n");
 
                         setArgCount(2);
@@ -953,6 +955,7 @@ void writeGP0(u32 data) {
                     case 0xE6:
                         std::printf("[GPU:GP0   ] Set Mask Bit\n");
                         break;
+                    case 0x06:
                     case 0xFF: // ???
                         std::printf("[GPU:GP0   ] Invalid command 0x%02X (0x%08X)\n", cmd, data);
                         break;
@@ -1013,8 +1016,14 @@ void writeGP0(u32 data) {
                     case 0x7D:
                         drawRect7C();
                         break;
-                    case 0x80: copyVRAMToVRAM(); break;
-                    case 0xA0: copyCPUToVRAM(); break;
+                    case 0x80:
+                    case 0x8E:
+                        copyVRAMToVRAM();
+                        break;
+                    case 0xA0:
+                    case 0xB1:
+                        copyCPUToVRAM();
+                        break;
                     case 0xC0: copyVRAMToCPU(); break;
                     default:
                         while (cmdParam.size()) cmdParam.pop();

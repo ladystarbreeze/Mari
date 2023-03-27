@@ -92,14 +92,16 @@ void checkInterrupt();
 void transferEndEvent(int chnID) {
     auto &chcr = channels[chnID].chcr;
 
-    std::printf("[DMAC      ] %s transfer end\n", chnNames[chnID]);
+    std::printf("[DMAC      ] Channel %d (%s) transfer end\n", chnID, chnNames[chnID]);
 
     chcr.str = false;
 
     /* Set interrupt pending flag, check for interrupts */
-    if (dicr.im & (1 << chnID)) dicr.ip |= 1 << chnID;
+    if (dicr.im & (1 << chnID)) {
+        dicr.ip |= 1 << chnID;
 
-    checkInterrupt();
+        checkInterrupt();
+    }
 }
 
 /* Returns DMA channel from address */
@@ -139,7 +141,7 @@ void doCDROM() {
         chn.madr += 4;
     }
 
-    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 24 * chn.size, true);
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 24 * chn.size);
 
     /* Clear BCR */
     chn.count = 0;
@@ -205,7 +207,7 @@ void doGPU() {
         }
     }
 
-    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), len, true);
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), len);
 
     /* Clear DMA request */
     //chn.drq = false;
@@ -235,7 +237,7 @@ void doMDECIN() {
         chn.madr += 4;
     }
 
-    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), chn.len, true);
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), chn.len);
 
     /* Clear DRQ */
     chn.drq = false;
@@ -266,7 +268,7 @@ void doMDECOUT() {
         chn.madr += 4;
     }
 
-    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), chn.len, true);
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), chn.len);
 
     /* Clear DRQ */
     chn.drq = false;
@@ -300,7 +302,7 @@ void doOTC() {
         chn.madr -= 4;
     }
 
-    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), chn.size, true);
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), chn.size);
 
     /* Clear BCR */
     chn.count = 0;
@@ -323,7 +325,7 @@ void doSPU() {
 
     /* TODO: SPU DMA */
 
-    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * chn.len, true);
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * chn.len);
 
     /* Clear BCR */
     chn.count = 0;
@@ -451,10 +453,6 @@ u32 read(u32 addr) {
 
 void write8(u32 addr, u8 data) {
     if (addr < static_cast<u32>(ControlReg::DPCR)) {
-        const auto chnID = static_cast<int>(getChannel(addr));
-
-        auto &chn = channels[chnID];
-
         switch (addr & ~(0xFF3)) {
             default:
                 std::printf("[DMAC      ] Unhandled 8-bit channel write @ 0x%08X = 0x%02X\n", addr, data);
@@ -547,10 +545,14 @@ void write32(u32 addr, u32 data) {
             case static_cast<u32>(ControlReg::DICR):
                 std::printf("[DMAC      ] 32-bit write @ DICR = 0x%08X\n", data);
 
+                std::printf("[DMAC      ] 0x%02X, 0x%02X\n", (data >> 16) & 0x7F, (data >> 24) & 0x7F);
+
                 dicr.fi  = data & (1 << 15);
                 dicr.im  = (data >> 16) & 0x7F;
                 dicr.mie = data & (1 << 23);
                 dicr.ip  = (dicr.ip & ~(data >> 24)) & 0x7F;
+
+                std::printf("[DMAC      ] IM = 0x%02X, IP = 0x%02X\n", dicr.im, dicr.ip);
 
                 checkInterrupt();
                 break;

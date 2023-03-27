@@ -104,8 +104,9 @@ u64 idSendIRQ; // Scheduler
 void readSector();
 
 /* BCD to char conversion */
-inline u8 toChar(u8 bcd)
-{
+inline u32 toChar(u8 bcd) {
+    assert(((bcd & 0xF0) <= 0x90) && ((bcd & 0xF) <= 9));
+
 	return (bcd / 16) * 10 + (bcd % 16);
 }
 
@@ -124,9 +125,9 @@ void sendIRQEvent(int irq) {
         readSector();
 
         if (mode & static_cast<u8>(Mode::Speed)) {
-            scheduler::addEvent(idSendIRQ, 1, READ_TIME_DOUBLE, false);
+            scheduler::addEvent(idSendIRQ, 1, READ_TIME_DOUBLE);
         } else {
-            scheduler::addEvent(idSendIRQ, 1, READ_TIME_SINGLE, false);
+            scheduler::addEvent(idSendIRQ, 1, READ_TIME_SINGLE);
         }
     }
 }
@@ -184,7 +185,7 @@ void cmdGetBIOSDate() {
     responseFIFO.push(0xC2);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
 /* Get ID - Activate motor, set mode = 0x20, abort all commands */
@@ -195,7 +196,7 @@ void cmdGetID() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, false);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
     /* Licensed, Mode2 */
     responseFIFO.push(0x02);
@@ -209,7 +210,7 @@ void cmdGetID() {
     responseFIFO.push('I');
 
     // Send INT2
-    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 30000, true);
+    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 30000);
 }
 
 /* Get Loc P - Returns position from subchannel Q */
@@ -227,7 +228,7 @@ void cmdGetLocP() {
     responseFIFO.push(seekParam.sector);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
 /* Get Stat - Activate motor, set mode = 0x20, abort all commands */
@@ -241,7 +242,7 @@ void cmdGetStat() {
     stat &= ~static_cast<u8>(Status::ShellOpen);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
 /* Get TD - Returns track start */
@@ -256,7 +257,7 @@ void cmdGetTD() {
     responseFIFO.push(0);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
 /* Get TN - Returns first and last track number */
@@ -269,7 +270,7 @@ void cmdGetTN() {
     responseFIFO.push(0x01);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
 /* Read TOC - Reread TOC */
@@ -286,10 +287,10 @@ void cmdReadTOC() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, false);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
     // Send INT2
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME + 20000, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME + 20000);
 }
 
 /* Init - Activate motor, set mode = 0x20, abort all commands */
@@ -300,7 +301,7 @@ void cmdInit() {
     responseFIFO.push(mode);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, 80000, false);
+    scheduler::addEvent(idSendIRQ, 3, 80000);
 
     stat |= static_cast<u8>(Status::MotorOn);
 
@@ -310,7 +311,7 @@ void cmdInit() {
     responseFIFO.push(mode);
 
     // Send INT2
-    scheduler::addEvent(idSendIRQ, 2, 80000 + 20000, true);
+    scheduler::addEvent(idSendIRQ, 2, 80000 + 20000);
 }
 
 /* Pause */
@@ -326,13 +327,13 @@ void cmdPause() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, false);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
     /* Pause is faster if drive is already paused */
     if (!(stat & (static_cast<u8>(Status::Play) | static_cast<u8>(Status::Read)))) {
-        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 10000, true);
+        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 10000);
     } else {
-        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 5 * READ_TIME_SINGLE, true);
+        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 5 * READ_TIME_SINGLE);
     }
 
     /* Pause drive */
@@ -351,16 +352,16 @@ void cmdReadN() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, false);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
     stat &= ~static_cast<u8>(Status::Seek);
     stat |=  static_cast<u8>(Status::Read);
 
     // Send INT2
     if (stat & static_cast<u8>(Mode::Speed)) {
-        scheduler::addEvent(idSendIRQ, 1, INT3_TIME + READ_TIME_DOUBLE, true);
+        scheduler::addEvent(idSendIRQ, 1, INT3_TIME + READ_TIME_DOUBLE);
     } else {
-        scheduler::addEvent(idSendIRQ, 1, INT3_TIME + READ_TIME_SINGLE, true);
+        scheduler::addEvent(idSendIRQ, 1, INT3_TIME + READ_TIME_SINGLE);
     }
 }
 
@@ -372,7 +373,7 @@ void cmdSeekL() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, false);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
     stat |= static_cast<u8>(Status::Seek);
 
@@ -380,7 +381,7 @@ void cmdSeekL() {
     responseFIFO.push(stat);
 
     // Send INT2
-    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 80000, true);
+    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 80000);
 }
 
 /* Set Filter - Sets XA filter */
@@ -393,7 +394,7 @@ void cmdSetFilter() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
 /* Set Loc - Sets seek parameters */
@@ -409,7 +410,7 @@ void cmdSetLoc() {
     seekParam.sector = paramFIFO.front(); paramFIFO.pop();
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
 /* Set Mode - Sets CDROM  mode */
@@ -422,7 +423,7 @@ void cmdSetMode() {
     mode = paramFIFO.front(); paramFIFO.pop();
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
 /* Unmute */
@@ -433,7 +434,7 @@ void cmdUnmute() {
     responseFIFO.push(stat);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, INT3_TIME, true);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
 /* Handles sub commands */
