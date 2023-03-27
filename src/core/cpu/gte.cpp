@@ -23,7 +23,9 @@ constexpr auto R = 0, G = 1, B = 2;
 /* --- GTE instructions --- */
 
 enum Opcode {
+    RTPS  = 0x01,
     NCLIP = 0x06,
+    MVMVA = 0x12,
     NCDS  = 0x13,
     AVSZ3 = 0x2D,
     RTPT  = 0x30,
@@ -37,10 +39,12 @@ enum GTEReg {
     VXY2 = 0x04, VZ2  = 0x05,
     RGBC = 0x06,
     OTZ  = 0x07,
-    IR0  = 0x08,
+    IR0  = 0x08, IR1  = 0x09, IR2  = 0x0A, IR3  = 0x0B,
     SXY0 = 0x0C, SXY1 = 0x0D, SXY2 = 0x0E, SXYP = 0x0F,
+    SZ0  = 0x10, SZ1  = 0x11, SZ2  = 0x12, SZ3  = 0x13,
     RGB0 = 0x14, RGB1 = 0x15, RGB2 = 0x16,
     MAC0 = 0x18,
+    LZCS = 0x1E, LZCR = 0x1F,
 };
 
 enum ControlReg {
@@ -70,6 +74,8 @@ u16   otz;
 i16   ir[4];   // 16-bit Accumulators
 i32   mac[4];  // Accumulators
 
+u32 lzcs, lzcr; // Leading Zero Count Source/Result
+
 /* --- GTE FIFOs --- */
 
 u32 sxy[3]; // Screen X/Y (three entries)
@@ -90,6 +96,14 @@ i16    dca;           // Depth cueing parameter A
 i32    dcb;           // Depth cueing parameter B
 i16    zsf3, zsf4;    // Z scale factors
 
+int countLeadingBits(u32 a) {
+    if (a & (1 << 31)) {
+        return std::__countl_one(a);
+    }
+
+    return std::__countl_zero(a);
+}
+
 u32 get(u32 idx) {
     switch (idx) {
         case GTEReg::OTZ:
@@ -98,6 +112,15 @@ u32 get(u32 idx) {
         case GTEReg::IR0:
             //std::printf("[GTE       ] Read @ IR0\n");
             return ir[0];
+        case GTEReg::IR1:
+            //std::printf("[GTE       ] Read @ IR1\n");
+            return ir[1];
+        case GTEReg::IR2:
+            //std::printf("[GTE       ] Read @ IR2\n");
+            return ir[2];
+        case GTEReg::IR3:
+            //std::printf("[GTE       ] Read @ IR3\n");
+            return ir[3];
         case GTEReg::SXY0:
             //std::printf("[GTE       ] Read @ SXY0\n");
             return sxy[0];
@@ -107,12 +130,21 @@ u32 get(u32 idx) {
         case GTEReg::SXY2:
             //std::printf("[GTE       ] Read @ SXY2\n");
             return sxy[2];
+        case GTEReg::SZ3:
+            //std::printf("[GTE       ] Read @ SXY3\n");
+            return sz[3];
         case GTEReg::RGB2:
             //std::printf("[GTE       ] Read @ RGB2\n");
             return rgb[2];
         case GTEReg::MAC0:
             //std::printf("[GTE       ] Read @ MAC0\n");
             return mac[0];
+        case GTEReg::LZCS:
+            //std::printf("[GTE       ] Read @ LZCS\n");
+            return lzcs;
+        case GTEReg::LZCR:
+            //std::printf("[GTE       ] Read @ LZCR\n");
+            return lzcr;
         default:
             std::printf("[GTE       ] Unhandled read @ %u\n", idx);
 
@@ -179,6 +211,12 @@ void set(u32 idx, u32 data) {
             //std::printf("[GTE       ] Write @ IR0 = 0x%08X\n", data);
 
             ir[0] = data;
+            break;
+        case GTEReg::LZCS:
+            //std::printf("[GTE       ] Write @ LZCS = 0x%08X\n", data);
+
+            lzcs = data;
+            lzcr = countLeadingBits(data);
             break;
         default:
             std::printf("[GTE       ] Unhandled write @ %u = 0x%08X\n", idx, data);
@@ -415,14 +453,6 @@ i64 extsMAC(u32 idx, i64 data) {
     return (data << shift) >> shift;
 }
 
-int countLeadingBits(u16 a) {
-    if (a & (1 << 31)) {
-        return std::__countl_one(a);
-    }
-
-    return std::__countl_zero(a);
-}
-
 /* GTE division (unsigned Newton-Raphson) */
 u32 div(u32 a, u32 b) {
     static const u8 unrTable[] = {
@@ -580,6 +610,96 @@ void iAVSZ3() {
     //std::printf("[GTE:AVSZ3 ] OTZ = 0x%04x\n", otz);
 }
 
+/* Vector-matrix multiply with vector add */
+void iMVMVA(u32 cmd) {
+    const bool lm = cmd & (1 << 10);
+    const bool sf = cmd & (1 << 19);
+    
+    const auto shift = 12 * sf;
+
+    Matrix m;
+
+    switch ((cmd >> 17) & 3) {
+        case 0:
+            for (int i = 0; i < 3; i++) {
+                m[i][X] = rt[i][X];
+                m[i][Y] = rt[i][Y];
+                m[i][Z] = rt[i][Z];
+            }
+            break;
+        case 1:
+            for (int i = 0; i < 3; i++) {
+                m[i][X] = ls[i][X];
+                m[i][Y] = ls[i][Y];
+                m[i][Z] = ls[i][Z];
+            }
+            break;
+        case 2:
+            for (int i = 0; i < 3; i++) {
+                m[i][X] = lc[i][X];
+                m[i][Y] = lc[i][Y];
+                m[i][Z] = lc[i][Z];
+            }
+            break;
+        default:
+            std::printf("[GTE:MVMVA ] Unhandled matrix %u\n", (cmd >> 17) & 3);
+
+            exit(0);
+    }
+
+    Vec16 vtx;
+
+    switch ((cmd >> 15) & 3) {
+        case 0:
+            vtx[X] = v[0][X];
+            vtx[Y] = v[0][Y];
+            vtx[Z] = v[0][Z];
+            break;
+        case 1:
+            vtx[X] = v[1][X];
+            vtx[Y] = v[1][Y];
+            vtx[Z] = v[1][Z];
+            break;
+        case 2:
+            vtx[X] = v[2][X];
+            vtx[Y] = v[2][Y];
+            vtx[Z] = v[2][Z];
+            break;
+        case 3:
+            vtx[X] = ir[1];
+            vtx[Y] = ir[2];
+            vtx[Z] = ir[3];
+            break;
+    }
+
+    Vec32 vt;
+
+    switch ((cmd >> 13) & 3) {
+        case 0:
+            vt[X] = tr[X];
+            vt[Y] = tr[Y];
+            vt[Z] = tr[Z];
+            break;
+        case 1:
+            vt[X] = bk[X];
+            vt[Y] = bk[Y];
+            vt[Z] = bk[Z];
+            break;
+        case 2:
+            vt[X] = fc[X];
+            vt[Y] = fc[Y];
+            vt[Z] = fc[Z];
+            break;
+        case 3:
+            vt[X] = 0;
+            vt[Y] = 0;
+            vt[Z] = 0;
+            break;
+    }
+
+    mulMVT(m, vtx, vt, shift, lm);
+}
+
 /* Normal Color Depth cue Single */
 void iNCDS(u32 cmd) {
     //std::printf("[GTE       ] NCDS\n");
@@ -619,6 +739,61 @@ void iNCLIP() {
     setMAC(0, clip, 0);
 
     //std::printf("[GTE:NCLIP ] MAC0 = 0x%08x\n", mac[0]);
+}
+
+/* Rotate/Translate Perspective Single */
+void iRTPS(u32 cmd) {
+    //std::printf("[GTE       ] RTPS\n");
+
+    const bool lm = cmd & (1 << 10);
+    const bool sf = cmd & (1 << 19);
+    
+    const auto shift = 12 * sf;
+
+    /* Do perspective transformation on vector Vi */
+    const auto x = extsMAC(1, extsMAC(1, 0x1000 * (i64)tr[X] + rt[0][X] * v[0][X]) + rt[0][Y] * v[0][Y] + rt[0][Z] * v[0][Z]);
+    const auto y = extsMAC(2, extsMAC(2, 0x1000 * (i64)tr[Y] + rt[1][X] * v[0][X]) + rt[1][Y] * v[0][Y] + rt[1][Z] * v[0][Z]);
+    const auto z = extsMAC(3, extsMAC(3, 0x1000 * (i64)tr[Z] + rt[2][X] * v[0][X]) + rt[2][Y] * v[0][Y] + rt[2][Z] * v[0][Z]);
+
+    /* Truncate results to 32 bits */
+    setMAC(1, x, shift);
+    setMAC(2, y, shift);
+    setMAC(3, z, shift);
+
+    setIR(1, mac[1], lm);
+    setIR(2, mac[2], lm);
+
+    setIR(3, z >> shift, false);
+
+    /* Push new screen Z */
+
+    pushSZ(mac[3] >> (12 * !sf));
+
+    //std::printf("[GTE:RTPS  ] SZ = 0x%04x\n", sz[3]);
+
+    /* Calculate and push new screen XY */
+
+    //const auto unr = (i64)div(h, sz[3]);
+    const auto unr = ((0x10000 * h) + (sz[3] >> 1)) / sz[3];
+
+    const auto sx = unr * (i64)ir[1] + (i64)ofx;
+    const auto sy = unr * (i64)ir[2] + (i64)ofy;
+
+    pushSXY(sx >> 16, sy >> 16);
+
+    //std::printf("[GTE:RTPS  ] SXY = 0x%08x\n", sxy[2]);
+
+    /* TODO: check for SX/SY MAC overflow */
+
+    /* Depth cue */
+
+    const auto dc = unr * (i64)dca + (i64)dcb;
+
+    setMAC(0, dc, 0);
+
+    setIR(0, dc >> 12, true);
+
+    //std::printf("[GTE:RTPS  ] IR0 = 0x%04x\n", ir[0]);
 }
 
 /* Rotate/Translate Perspective Triple */
@@ -682,7 +857,9 @@ void doCmd(u32 cmd) {
     const auto opcode = cmd & 0x3F;
 
     switch (opcode) {
+        case Opcode::RTPS : iRTPS(cmd); break;
         case Opcode::NCLIP: iNCLIP(); break;
+        case Opcode::MVMVA: iMVMVA(cmd); break;
         case Opcode::NCDS : iNCDS(cmd); break;
         case Opcode::AVSZ3: iAVSZ3(); break;
         case Opcode::RTPT : iRTPT(cmd); break;
