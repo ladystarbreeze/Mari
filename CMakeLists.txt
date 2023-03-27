@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.2)
 project(Mari CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_options(-O1 -Wall -Wextra)
@@ -16,6 +16,7 @@ set(SOURCES
     src/core/cdrom/cdrom.cpp
     src/core/cpu/cop0.cpp
     src/core/cpu/cpu.cpp
+    src/core/cpu/gte.cpp
     src/core/dmac/dmac.cpp
     src/core/gpu/gpu.cpp
     src/core/mdec/mdec.cpp
@@ -33,6 +34,7 @@ set(HEADERS
     src/core/cdrom/cdrom.hpp
     src/core/cpu/cop0.hpp
     src/core/cpu/cpu.hpp
+    src/core/cpu/gte.hpp
     src/core/dmac/dmac.hpp
     src/core/gpu/gpu.hpp
     src/core/mdec/mdec.hpp
