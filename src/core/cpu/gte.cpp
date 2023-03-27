@@ -28,6 +28,7 @@ enum Opcode {
     MVMVA = 0x12,
     NCDS  = 0x13,
     AVSZ3 = 0x2D,
+    AVSZ4 = 0x2E,
     RTPT  = 0x30,
 };
 
@@ -43,7 +44,7 @@ enum GTEReg {
     SXY0 = 0x0C, SXY1 = 0x0D, SXY2 = 0x0E, SXYP = 0x0F,
     SZ0  = 0x10, SZ1  = 0x11, SZ2  = 0x12, SZ3  = 0x13,
     RGB0 = 0x14, RGB1 = 0x15, RGB2 = 0x16,
-    MAC0 = 0x18,
+    MAC0 = 0x18, MAC1 = 0x19, MAC2 = 0x1A, MAC3 = 0x1B,
     LZCS = 0x1E, LZCR = 0x1F,
 };
 
@@ -139,6 +140,15 @@ u32 get(u32 idx) {
         case GTEReg::MAC0:
             //std::printf("[GTE       ] Read @ MAC0\n");
             return mac[0];
+        case GTEReg::MAC1:
+            //std::printf("[GTE       ] Read @ MAC1\n");
+            return mac[1];
+        case GTEReg::MAC2:
+            //std::printf("[GTE       ] Read @ MAC2\n");
+            return mac[2];
+        case GTEReg::MAC3:
+            //std::printf("[GTE       ] Read @ MAC3\n");
+            return mac[3];
         case GTEReg::LZCS:
             //std::printf("[GTE       ] Read @ LZCS\n");
             return lzcs;
@@ -211,6 +221,21 @@ void set(u32 idx, u32 data) {
             //std::printf("[GTE       ] Write @ IR0 = 0x%08X\n", data);
 
             ir[0] = data;
+            break;
+        case GTEReg::IR1:
+            //std::printf("[GTE       ] Write @ IR1 = 0x%08X\n", data);
+
+            ir[1] = data;
+            break;
+        case GTEReg::IR2:
+            //std::printf("[GTE       ] Write @ IR2 = 0x%08X\n", data);
+
+            ir[2] = data;
+            break;
+        case GTEReg::IR3:
+            //std::printf("[GTE       ] Write @ IR3 = 0x%08X\n", data);
+
+            ir[3] = data;
             break;
         case GTEReg::LZCS:
             //std::printf("[GTE       ] Write @ LZCS = 0x%08X\n", data);
@@ -589,7 +614,7 @@ void pushSZ(i64 data) {
     sz[3] = data;
 }
 
-/* AVerage Screen Z */
+/* AVerage Screen Z (3 values) */
 void iAVSZ3() {
     /* Multiply Zs by Z scale factor */
 
@@ -608,6 +633,27 @@ void iAVSZ3() {
     otz = z;
 
     //std::printf("[GTE:AVSZ3 ] OTZ = 0x%04x\n", otz);
+}
+
+/* AVerage Screen Z (4 values) */
+void iAVSZ4() {
+    /* Multiply Zs by Z scale factor */
+
+    setMAC(0, (i64)zsf4 * ((i64)sz[0] + (i64)sz[1] + (i64)sz[2] + (i64)sz[3]), 0);
+
+    /* Clip and set ordering table Z */
+
+    auto z = mac[0] >> 12;
+
+    if (z > 0xFFFF) {
+        z = 0xFFFF;
+    } else if (z < 0) {
+        z = 0;
+    }
+
+    otz = z;
+
+    //std::printf("[GTE:AVSZ4 ] OTZ = 0x%04x\n", otz);
 }
 
 /* Vector-matrix multiply with vector add */
@@ -862,6 +908,7 @@ void doCmd(u32 cmd) {
         case Opcode::MVMVA: iMVMVA(cmd); break;
         case Opcode::NCDS : iNCDS(cmd); break;
         case Opcode::AVSZ3: iAVSZ3(); break;
+        case Opcode::AVSZ4: iAVSZ4(); break;
         case Opcode::RTPT : iRTPT(cmd); break;
         default:
             std::printf("[GTE       ] Unhandled instruction 0x%02X (0x%07X)\n", opcode, cmd);
