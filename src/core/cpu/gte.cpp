@@ -256,6 +256,21 @@ void set(u32 idx, u32 data) {
 
             ir[3] = data;
             break;
+        case GTEReg::RGB0:
+            //std::printf("[GTE       ] Write @ RGB0 = 0x%08X\n", data);
+
+            rgb[0] = data;
+            break;
+        case GTEReg::RGB1:
+            //std::printf("[GTE       ] Write @ RGB1 = 0x%08X\n", data);
+
+            rgb[1] = data;
+            break;
+        case GTEReg::RGB2:
+            //std::printf("[GTE       ] Write @ RGB2 = 0x%08X\n", data);
+
+            rgb[2] = data;
+            break;
         case GTEReg::LZCS:
             //std::printf("[GTE       ] Write @ LZCS = 0x%08X\n", data);
 
