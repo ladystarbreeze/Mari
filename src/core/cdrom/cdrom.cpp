@@ -33,11 +33,13 @@ enum Command {
     GetStat   = 0x01,
     SetLoc    = 0x02,
     ReadN     = 0x06,
+    Stop      = 0x08,
     Pause     = 0x09,
     Init      = 0x0A,
     Unmute    = 0x0C,
     SetFilter = 0x0D,
     SetMode   = 0x0E,
+    GetLocL   = 0x10,
     GetLocP   = 0x11,
     GetTN     = 0x13,
     GetTD     = 0x14,
@@ -99,6 +101,8 @@ SeekParam seekParam;
 u8 readBuf[SECTOR_SIZE];
 int readIdx;
 
+u64 seekTarget;
+
 u64 idSendIRQ; // Scheduler
 
 void readSector();
@@ -140,9 +144,9 @@ void readSector() {
     const auto ss   = toChar(s.secs) * 75; // 1min = 75 sectors
     const auto sect = toChar(s.sector);
 
-    const auto seekTarget = mm + ss + sect - 150; // Starts at 2s, subtract 150 sectors to get start
+    seekTarget = mm + ss + sect - 150; // Starts at 2s, subtract 150 sectors to get start
 
-    std::printf("[CDROM     ] Seeking to [%02X:%02X:%02X] = %d\n", s.mins, s.secs, s.sector, seekTarget);
+    std::printf("[CDROM     ] Seeking to [%02X:%02X:%02X] = %llu\n", s.mins, s.secs, s.sector, seekTarget);
 
     file.seekg(seekTarget * SECTOR_SIZE, std::ios_base::beg);
 
@@ -211,6 +215,22 @@ void cmdGetID() {
 
     // Send INT2
     scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 30000);
+}
+
+/* Get Loc L - Returns position from header */
+void cmdGetLocL() {
+    std::printf("[CDROM     ] Get Loc L\n");
+
+    char buf[8];
+
+    file.seekg(seekTarget * SECTOR_SIZE + 12, std::ios_base::beg);
+    file.read(buf, 8);
+
+    // Send information
+    for (int i = 0; i < 8; i++) responseFIFO.push(buf[i]);
+
+    // Send INT3
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
 /* Get Loc P - Returns position from subchannel Q */
@@ -426,6 +446,30 @@ void cmdSetMode() {
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
+/* Stop */
+void cmdStop() {
+    std::printf("[CDROM     ] Stop\n");
+
+    scheduler::removeEvent(idSendIRQ); // Kill all pending CDROM events
+
+    /* Clear response buffer */
+    while (!responseFIFO.empty()) responseFIFO.pop();
+
+    stat &= ~(1 << 5);
+
+    // Send status
+    responseFIFO.push(stat);
+
+    // Send INT3
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
+    scheduler::addEvent(idSendIRQ, 2, CPU_SPEED);
+
+    stat &= ~(1 << 1);
+
+    // Send status
+    responseFIFO.push(stat);
+}
+
 /* Unmute */
 void cmdUnmute() {
     std::printf("[CDROM     ] Unmute\n");
@@ -458,11 +502,13 @@ void doCmd(u8 data) {
         case Command::GetStat  : cmdGetStat(); break;
         case Command::SetLoc   : cmdSetLoc(); break;
         case Command::ReadN    : cmdReadN(); break;
+        case Command::Stop     : cmdStop(); break;
         case Command::Pause    : cmdPause(); break;
         case Command::Init     : cmdInit(); break;
         case Command::Unmute   : cmdUnmute(); break;
         case Command::SetFilter: cmdSetFilter(); break;
         case Command::SetMode  : cmdSetMode(); break;
+        case Command::GetLocL  : cmdGetLocL(); break;
         case Command::GetLocP  : cmdGetLocP(); break;
         case Command::GetTN    : cmdGetTN(); break;
         case Command::GetTD    : cmdGetTD(); break;
