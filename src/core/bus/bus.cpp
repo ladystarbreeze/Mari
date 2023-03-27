@@ -169,6 +169,9 @@ u32 read32(u32 addr) {
             case 0x1F80101C:
                 std::printf("[Bus       ] 32-bit read @ EXP2_SIZE\n");
                 return exp2Size;
+            case 0x1F801060:
+                std::printf("[Bus       ] 32-bit read @ RAM_SIZE\n");
+                return 0x00000B88;
             case 0x1F801070:
                 //std::printf("[Bus       ] 32-bit read @ I_STAT\n");
                 return intc::readStat();
