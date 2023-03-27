@@ -93,25 +93,25 @@ i16    zsf3, zsf4;    // Z scale factors
 u32 get(u32 idx) {
     switch (idx) {
         case GTEReg::OTZ:
-            std::printf("[GTE       ] Read @ OTZ\n");
+            //std::printf("[GTE       ] Read @ OTZ\n");
             return otz;
         case GTEReg::IR0:
-            std::printf("[GTE       ] Read @ IR0\n");
+            //std::printf("[GTE       ] Read @ IR0\n");
             return ir[0];
         case GTEReg::SXY0:
-            std::printf("[GTE       ] Read @ SXY0\n");
+            //std::printf("[GTE       ] Read @ SXY0\n");
             return sxy[0];
         case GTEReg::SXY1:
-            std::printf("[GTE       ] Read @ SXY1\n");
+            //std::printf("[GTE       ] Read @ SXY1\n");
             return sxy[1];
         case GTEReg::SXY2:
-            std::printf("[GTE       ] Read @ SXY2\n");
+            //std::printf("[GTE       ] Read @ SXY2\n");
             return sxy[2];
         case GTEReg::RGB2:
-            std::printf("[GTE       ] Read @ RGB2\n");
+            //std::printf("[GTE       ] Read @ RGB2\n");
             return rgb[2];
         case GTEReg::MAC0:
-            std::printf("[GTE       ] Read @ MAC0\n");
+            //std::printf("[GTE       ] Read @ MAC0\n");
             return mac[0];
         default:
             std::printf("[GTE       ] Unhandled read @ %u\n", idx);
@@ -123,7 +123,7 @@ u32 get(u32 idx) {
 u32 getControl(u32 idx) {
     switch (idx) {
         case ControlReg::FLAG:
-            std::printf("[GTE       ] Control read @ FLAG\n");
+            //std::printf("[GTE       ] Control read @ FLAG\n");
             return 0;
         default:
             std::printf("[GTE       ] Unhandled control read @ %u\n", idx);
@@ -135,40 +135,40 @@ u32 getControl(u32 idx) {
 void set(u32 idx, u32 data) {
     switch (idx) {
         case GTEReg::VXY0:
-            std::printf("[GTE       ] Write @ VXY0 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Write @ VXY0 = 0x%08X\n", data);
 
             v[0][X] = data;
             v[0][Y] = data >> 16;
             break;
         case GTEReg::VZ0:
-            std::printf("[GTE       ] Write @ VZ0 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Write @ VZ0 = 0x%08X\n", data);
 
             v[0][Z] = data;
             break;
         case GTEReg::VXY1:
-            std::printf("[GTE       ] Write @ VXY1 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Write @ VXY1 = 0x%08X\n", data);
 
             v[1][X] = data;
             v[1][Y] = data >> 16;
             break;
         case GTEReg::VZ1:
-            std::printf("[GTE       ] Write @ VZ1 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Write @ VZ1 = 0x%08X\n", data);
 
             v[1][Z] = data;
             break;
         case GTEReg::VXY2:
-            std::printf("[GTE       ] Write @ VXY2 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Write @ VXY2 = 0x%08X\n", data);
 
             v[2][X] = data;
             v[2][Y] = data >> 16;
             break;
         case GTEReg::VZ2:
-            std::printf("[GTE       ] Write @ VZ2 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Write @ VZ2 = 0x%08X\n", data);
 
             v[2][Z] = data;
             break;
         case GTEReg::RGBC:
-            std::printf("[GTE       ] Write @ RGBC = 0x%08X\n", data);
+            //std::printf("[GTE       ] Write @ RGBC = 0x%08X\n", data);
 
             rgbc[0] = data;
             rgbc[1] = data >>  8;
@@ -176,7 +176,7 @@ void set(u32 idx, u32 data) {
             rgbc[3] = data >> 24;
             break;
         case GTEReg::IR0:
-            std::printf("[GTE       ] Write @ IR0 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Write @ IR0 = 0x%08X\n", data);
 
             ir[0] = data;
             break;
@@ -190,169 +190,169 @@ void set(u32 idx, u32 data) {
 void setControl(u32 idx, u32 data) {
     switch (idx) {
         case ControlReg::RT11RT12:
-            std::printf("[GTE       ] Control write @ RT11RT12 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ RT11RT12 = 0x%08X\n", data);
 
             rt[0][0] = data;
             rt[0][1] = data >> 16;
             break;
         case ControlReg::RT13RT21:
-            std::printf("[GTE       ] Control write @ RT13RT21 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ RT13RT21 = 0x%08X\n", data);
 
             rt[0][2] = data;
             rt[1][0] = data >> 16;
             break;
         case ControlReg::RT22RT23:
-            std::printf("[GTE       ] Control write @ RT22RT23 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ RT22RT23 = 0x%08X\n", data);
 
             rt[1][1] = data;
             rt[1][2] = data >> 16;
             break;
         case ControlReg::RT31RT32:
-            std::printf("[GTE       ] Control write @ RT31RT32 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ RT31RT32 = 0x%08X\n", data);
 
             rt[2][0] = data;
             rt[2][1] = data >> 16;
             break;
         case ControlReg::RT33:
-            std::printf("[GTE       ] Control write @ RT33 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ RT33 = 0x%08X\n", data);
 
             rt[2][2] = data;
             break;
         case ControlReg::TRX:
-            std::printf("[GTE       ] Control write @ TRX = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ TRX = 0x%08X\n", data);
 
             tr[X] = data;
             break;
         case ControlReg::TRY:
-            std::printf("[GTE       ] Control write @ TRY = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ TRY = 0x%08X\n", data);
 
             tr[Y] = data;
             break;
         case ControlReg::TRZ:
-            std::printf("[GTE       ] Control write @ TRZ = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ TRZ = 0x%08X\n", data);
 
             tr[Z] = data;
             break;
         case ControlReg::L11L12:
-            std::printf("[GTE       ] Control write @ L11L12 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ L11L12 = 0x%08X\n", data);
 
             ls[0][0] = data;
             ls[0][1] = data >> 16;
             break;
         case ControlReg::L13L21:
-            std::printf("[GTE       ] Control write @ L13L21 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ L13L21 = 0x%08X\n", data);
 
             ls[0][2] = data;
             ls[1][0] = data >> 16;
             break;
         case ControlReg::L22L23:
-            std::printf("[GTE       ] Control write @ L22L23 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ L22L23 = 0x%08X\n", data);
 
             ls[1][1] = data;
             ls[1][2] = data >> 16;
             break;
         case ControlReg::L31L32:
-            std::printf("[GTE       ] Control write @ L31L32 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ L31L32 = 0x%08X\n", data);
 
             ls[2][0] = data;
             ls[2][1] = data >> 16;
             break;
         case ControlReg::L33:
-            std::printf("[GTE       ] Control write @ L33 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ L33 = 0x%08X\n", data);
 
             ls[2][2] = data;
             break;
         case ControlReg::RBK:
-            std::printf("[GTE       ] Control write @ RBK = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ RBK = 0x%08X\n", data);
 
             bk[R] = data;
             break;
         case ControlReg::GBK:
-            std::printf("[GTE       ] Control write @ GBK = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ GBK = 0x%08X\n", data);
 
             bk[G] = data;
             break;
         case ControlReg::BBK:
-            std::printf("[GTE       ] Control write @ BBK = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ BBK = 0x%08X\n", data);
 
             bk[B] = data;
             break;
         case ControlReg::LR1LR2:
-            std::printf("[GTE       ] Control write @ LR1LR2 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ LR1LR2 = 0x%08X\n", data);
 
             lc[LCM::LR][0] = data;
             lc[LCM::LR][1] = data >> 16;
             break;
         case ControlReg::LR3LG1:
-            std::printf("[GTE       ] Control write @ LR3LG1 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ LR3LG1 = 0x%08X\n", data);
 
             lc[LCM::LR][2] = data;
             lc[LCM::LG][0] = data >> 16;
             break;
         case ControlReg::LG2LG3:
-            std::printf("[GTE       ] Control write @ LG2LG3 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ LG2LG3 = 0x%08X\n", data);
 
             lc[LCM::LG][1] = data;
             lc[LCM::LG][2] = data >> 16;
             break;
         case ControlReg::LB1LB2:
-            std::printf("[GTE       ] Control write @ LB1LB2 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ LB1LB2 = 0x%08X\n", data);
 
             lc[LCM::LB][0] = data;
             lc[LCM::LB][1] = data >> 16;
             break;
         case ControlReg::LB3:
-            std::printf("[GTE       ] Control write @ LB3 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ LB3 = 0x%08X\n", data);
 
             lc[LCM::LB][2] = data;
             break;
         case ControlReg::RFC:
-            std::printf("[GTE       ] Control write @ RFC = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ RFC = 0x%08X\n", data);
 
             fc[R] = data;
             break;
         case ControlReg::GFC:
-            std::printf("[GTE       ] Control write @ GFC = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ GFC = 0x%08X\n", data);
 
             fc[G] = data;
             break;
         case ControlReg::BFC:
-            std::printf("[GTE       ] Control write @ BFC = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ BFC = 0x%08X\n", data);
 
             fc[B] = data;
             break;
         case ControlReg::OFX:
-            std::printf("[GTE       ] Control write @ OFX = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ OFX = 0x%08X\n", data);
 
             ofx = data;
             break;
         case ControlReg::OFY:
-            std::printf("[GTE       ] Control write @ OFY = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ OFY = 0x%08X\n", data);
 
             ofy = data;
             break;
         case ControlReg::H:
-            std::printf("[GTE       ] Control write @ H = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ H = 0x%08X\n", data);
 
             h = data;
             break;
         case ControlReg::DCA:
-            std::printf("[GTE       ] Control write @ DCA = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ DCA = 0x%08X\n", data);
 
             dca = data;
             break;
         case ControlReg::DCB:
-            std::printf("[GTE       ] Control write @ DCB = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ DCB = 0x%08X\n", data);
 
             dcb = data;
             break;
         case ControlReg::ZSF3:
-            std::printf("[GTE       ] Control write @ ZSF3 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ ZSF3 = 0x%08X\n", data);
 
             zsf3 = data;
             break;
         case ControlReg::ZSF4:
-            std::printf("[GTE       ] Control write @ ZSF4 = 0x%08X\n", data);
+            //std::printf("[GTE       ] Control write @ ZSF4 = 0x%08X\n", data);
 
             zsf4 = data;
             break;
@@ -577,12 +577,12 @@ void iAVSZ3() {
 
     otz = z;
 
-    std::printf("[GTE:AVSZ3 ] OTZ = 0x%04x\n", otz);
+    //std::printf("[GTE:AVSZ3 ] OTZ = 0x%04x\n", otz);
 }
 
 /* Normal Color Depth cue Single */
 void iNCDS(u32 cmd) {
-    std::printf("[GTE       ] NCDS\n");
+    //std::printf("[GTE       ] NCDS\n");
 
     const bool lm = cmd & (1 << 10);
     const bool sf = cmd & (1 << 19);
@@ -607,23 +607,23 @@ void iNCDS(u32 cmd) {
 
     pushRGB(col);
 
-    std::printf("[GTE:NCDS  ] RGB2 = 0x%08x\n", rgb[2]);
+    //std::printf("[GTE:NCDS  ] RGB2 = 0x%08x\n", rgb[2]);
 }
 
 /* Normal CLIPping */
 void iNCLIP() {
-    std::printf("[GTE       ] NCLIP\n");
+    //std::printf("[GTE       ] NCLIP\n");
 
     const auto clip = (i64)getSX(0) * (i64)getSY(1) + (i64)getSX(1) * (i64)getSY(2) + (i64)getSX(2) * (i64)getSY(0) - (i64)getSX(0) * (i64)getSY(2) - (i64)getSX(1) * (i64)getSY(0) - (i64)getSX(2) * (i64)getSY(1);
 
     setMAC(0, clip, 0);
 
-    std::printf("[GTE:NCLIP ] MAC0 = 0x%08x\n", mac[0]);
+    //std::printf("[GTE:NCLIP ] MAC0 = 0x%08x\n", mac[0]);
 }
 
 /* Rotate/Translate Perspective Triple */
 void iRTPT(u32 cmd) {
-    std::printf("[GTE       ] RTPT\n");
+    //std::printf("[GTE       ] RTPT\n");
 
     const bool lm = cmd & (1 << 10);
     const bool sf = cmd & (1 << 19);
@@ -650,7 +650,7 @@ void iRTPT(u32 cmd) {
 
         pushSZ(mac[3] >> (12 * !sf));
 
-        std::printf("[GTE:RTPT  ] SZ = 0x%04x\n", sz[3]);
+        //std::printf("[GTE:RTPT  ] SZ = 0x%04x\n", sz[3]);
 
         /* Calculate and push new screen XY */
 
@@ -662,7 +662,7 @@ void iRTPT(u32 cmd) {
 
         pushSXY(sx >> 16, sy >> 16);
 
-        std::printf("[GTE:RTPT  ] SXY = 0x%08x\n", sxy[2]);
+        //std::printf("[GTE:RTPT  ] SXY = 0x%08x\n", sxy[2]);
 
         /* TODO: check for SX/SY MAC overflow */
 
@@ -674,7 +674,7 @@ void iRTPT(u32 cmd) {
 
         setIR(0, dc >> 12, true);
 
-        std::printf("[GTE:RTPT  ] IR0 = 0x%04x\n", ir[0]);
+        //std::printf("[GTE:RTPT  ] IR0 = 0x%04x\n", ir[0]);
     }
 }
 
@@ -687,7 +687,7 @@ void doCmd(u32 cmd) {
         case Opcode::AVSZ3: iAVSZ3(); break;
         case Opcode::RTPT : iRTPT(cmd); break;
         default:
-            std::printf("[GTE       ] Unhandled instruction 0x%02X (0x%07X)\n", opcode, cmd);
+            //std::printf("[GTE       ] Unhandled instruction 0x%02X (0x%07X)\n", opcode, cmd);
 
             exit(0);
     }
