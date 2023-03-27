@@ -13,7 +13,7 @@ namespace ps::cpu::gte {
 
 typedef i16 Matrix[3][3];
 typedef i16 Vec16[3];
-typedef u32 Vec32[3];
+typedef i32 Vec32[3];
 
 /* --- GTE constants --- */
 
@@ -84,10 +84,10 @@ Matrix ls;            // Light source matrix
 Vec32  bk;            // Background color R/G/B
 Matrix lc;            // Light color matrix
 Vec32  fc;            // Far color R/G/B
-u32    ofx, ofy;      // Screen offset X/Y
+i32    ofx, ofy;      // Screen offset X/Y
 u16    h;             // Projection plane distance
 i16    dca;           // Depth cueing parameter A
-u32    dcb;           // Depth cueing parameter B
+i32    dcb;           // Depth cueing parameter B
 i16    zsf3, zsf4;    // Z scale factors
 
 u32 get(u32 idx) {
@@ -563,7 +563,7 @@ void pushSZ(i64 data) {
 void iAVSZ3() {
     /* Multiply Zs by Z scale factor */
 
-    setMAC(0, (i64)zsf3 * (sz[1] + sz[2] + sz[3]), 0);
+    setMAC(0, (i64)zsf3 * ((i64)sz[1] + (i64)sz[2] + (i64)sz[3]), 0);
 
     /* Clip and set ordering table Z */
 
@@ -595,7 +595,7 @@ void iNCDS(u32 cmd) {
 
     mulMVT(lc, vtx, bk, shift, lm);
 
-    intCol(((i32)rgbc[0] * ir[1]) << 4, ((i32)rgbc[1] * ir[2]) << 4, ((i32)rgbc[2] * ir[3]) << 4, shift, lm);
+    intCol(((i32)rgbc[0] * (i32)ir[1]) << 4, ((i32)rgbc[1] * (i32)ir[2]) << 4, ((i32)rgbc[2] * (i32)ir[3]) << 4, shift, lm);
 
     /* Calculate and push color/code */
 
@@ -657,8 +657,8 @@ void iRTPT(u32 cmd) {
         //const auto unr = (i64)div(h, sz[3]);
         const auto unr = ((0x10000 * h) + (sz[3] >> 1)) / sz[3];
 
-        const auto sx = unr * ir[1] + ofx;
-        const auto sy = unr * ir[2] + ofy;
+        const auto sx = unr * (i64)ir[1] + (i64)ofx;
+        const auto sy = unr * (i64)ir[2] + (i64)ofy;
 
         pushSXY(sx >> 16, sy >> 16);
 
@@ -668,7 +668,7 @@ void iRTPT(u32 cmd) {
 
         /* Depth cue */
 
-        const auto dc = unr * dca + dcb;
+        const auto dc = unr * (i64)dca + (i64)dcb;
 
         setMAC(0, dc, 0);
 
