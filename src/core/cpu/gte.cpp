@@ -23,15 +23,19 @@ constexpr auto R = 0, G = 1, B = 2;
 /* --- GTE instructions --- */
 
 enum Opcode {
-    RTPT = 0x30,
+    NCLIP = 0x06,
+    NCDS  = 0x13,
+    RTPT  = 0x30,
 };
 
 /* --- GTE registers --- */
 
 enum GTEReg {
-    VX0 = 0x00, VY0 = 0x01, VZ0 = 0x02,
-    VX1 = 0x03, VY1 = 0x04, VZ1 = 0x05,
-    VX2 = 0x06, VY2 = 0x07, VZ2 = 0x08,
+    VX0  = 0x00, VY0  = 0x01, VZ0  = 0x02,
+    VX1  = 0x03, VY1  = 0x04, VZ1  = 0x05,
+    VX2  = 0x06, VY2  = 0x07, VZ2  = 0x08,
+    SXY0 = 0x0C, SXY1 = 0x0D, SXY2 = 0x0E, SXYP = 0x0F,
+    MAC0 = 0x18,
 };
 
 enum ControlReg {
@@ -79,9 +83,15 @@ u32    dcb;           // Depth cueing parameter B
 i16    zsf3, zsf4;    // Z scale factors
 
 u32 get(u32 idx) {
-    std::printf("[GTE       ] Unhandled read @ %u\n", idx);
+    switch (idx) {
+        case GTEReg::MAC0:
+            //std::printf("[GTE       ] Read @ MAC0\n");
+            return mac[0];
+        default:
+            std::printf("[GTE       ] Unhandled read @ %u\n", idx);
 
-    exit(0);
+            exit(0);
+    }
 }
 
 u32 getControl(u32 idx) {
@@ -384,6 +394,14 @@ u32 div(u32 a, u32 b) {
 
 /* --- GTE FIFO handlers --- */
 
+i16 getSX(u32 idx) {
+    return (i16)sxy[idx];
+}
+
+i16 getSY(u32 idx) {
+    return (i16)(sxy[idx] >> 16);
+}
+
 /* Pushes screen X and Y values, performs clipping checks */
 void pushSXY(i64 x, i64 y) {
     if (x > 1023) {
@@ -460,6 +478,15 @@ i64 extsMAC(u32 idx, i64 data) {
     return (data << shift) >> shift;
 }
 
+/* Normal Clipping */
+void iNCLIP() {
+    //std::printf("[GTE       ] NCLIP\n");
+
+    const auto clip = (i64)getSX(0) * (i64)getSY(1) + (i64)getSX(1) * (i64)getSY(2) + (i64)getSX(2) * (i64)getSY(0) - (i64)getSX(0) * (i64)getSY(2) - (i64)getSX(1) * (i64)getSY(0) - (i64)getSX(2) * (i64)getSY(1);
+
+    setMAC(0, clip, 0);
+}
+
 /* Perspective Transform Triple */
 void iRTPT(u32 cmd) {
     //std::printf("[GTE       ] RTPT\n");
@@ -514,7 +541,8 @@ void doCmd(u32 cmd) {
     const auto opcode = cmd & 0x3F;
 
     switch (opcode) {
-        case Opcode::RTPT: iRTPT(cmd); break;
+        case Opcode::NCLIP: iNCLIP(); break;
+        case Opcode::RTPT : iRTPT(cmd); break;
         default:
             std::printf("[GTE       ] Unhandled instruction 0x%02X (0x%07X)\n", opcode, cmd);
 
