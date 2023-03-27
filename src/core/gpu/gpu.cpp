@@ -477,6 +477,32 @@ void drawTri30() {
     state = GPUState::ReceiveCommand;
 }
 
+/* GP0(0x34) Draw Shaded Textured Triangle */
+void drawTri34() {
+    Vertex v[3];
+
+    for (int i = 0; i < 3; i++) {
+        const auto c0 = cmdParam.front(); cmdParam.pop();
+        const auto v0 = cmdParam.front(); cmdParam.pop();
+        const auto t0 = cmdParam.front(); cmdParam.pop();
+
+        v[i] = Vertex(v0, c0, t0);
+    }
+
+    const auto clut = v[0].tex >> 16;
+
+    u32 texPage;
+    if (edgeFunction(v[0], v[1], v[2]) < 0) {
+        texPage = v[2].tex >> 16;
+    } else {
+        texPage = v[1].tex >> 16;
+    }
+
+    drawTexturedTri(v[0], v[1], v[2], clut, texPage);
+
+    state = GPUState::ReceiveCommand;
+}
+
 /* GP0(0x28) Draw Flat Quadrilateral (opaque) */
 void drawQuad28() {
     const auto color = cmdParam.front(); cmdParam.pop();
@@ -845,6 +871,14 @@ void writeGP0(u32 data) {
 
                         setArgCount(5);
                         break;
+                    case 0x34:
+                    case 0x36:
+                        //std::printf("[GPU:GP0   ] Draw Shaded Textured Tri\n");
+
+                        cmdParam.push(data); // Also first argument
+
+                        setArgCount(8);
+                        break;
                     case 0x38:
                     case 0x3A:
                         //std::printf("[GPU:GP0   ] Draw Shaded Quad (opaque)\n");
@@ -890,7 +924,8 @@ void writeGP0(u32 data) {
                         setArgCount(1);
                         break;
                     case 0x74:
-                        //std::printf("[GPU:GP0   ] Draw Textured Rectangle (8x8, opaque)\n");
+                    case 0x75:
+                        //std::printf("[GPU:GP0   ] Draw Textured Rectangle (8x8)\n");
 
                         cmdParam.push(data); // Also first argument
 
@@ -993,6 +1028,10 @@ void writeGP0(u32 data) {
                     case 0x32:
                         drawTri30();
                         break;
+                    case 0x34:
+                    case 0x36:
+                        drawTri34();
+                        break;
                     case 0x38:
                     case 0x3A:
                         drawQuad38();
@@ -1010,7 +1049,10 @@ void writeGP0(u32 data) {
                     case 0x66:
                         drawRect65();
                         break;
-                    case 0x74: drawRect74(); break;
+                    case 0x74:
+                    case 0x75:
+                        drawRect74();
+                        break;
                     case 0x78: drawRect78(); break;
                     case 0x7C:
                     case 0x7D:
