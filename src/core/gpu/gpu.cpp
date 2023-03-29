@@ -22,10 +22,10 @@ using Interrupt = intc::Interrupt;
 
 /* --- GPU constants --- */
 
-constexpr i64 CYCLES_PER_HDRAW    = 2560;
-constexpr i64 CYCLES_PER_SCANLINE = 3413; // NTSC
+constexpr i64 CYCLES_PER_HDRAW    = 2560 / 1.57;
+constexpr i64 CYCLES_PER_SCANLINE = 3413 / 1.57; // NTSC
 constexpr i64 SCANLINES_PER_VDRAW = 240;
-constexpr i64 SCANLINES_PER_FRAME = 262;
+constexpr i64 SCANLINES_PER_FRAME = 263;
 
 constexpr size_t VRAM_WIDTH  = 1024;
 constexpr size_t VRAM_HEIGHT = 512;
