@@ -94,7 +94,7 @@ void init() {
 u8 read8(u32 addr) {
     u8 data;
 
-    if (addr >= 0x1F80050) return 0;
+    if (addr >= 0x1F801050) return 0;
 
     switch (addr) {
         case static_cast<u32>(SIOReg::JOYFIFO):
@@ -120,7 +120,7 @@ u8 read8(u32 addr) {
 u16 read16(u32 addr) {
     u16 data;
 
-    if (addr >= 0x1F80050) return 0;
+    if (addr >= 0x1F801050) return 0;
 
     switch (addr) {
         case static_cast<u32>(SIOReg::JOYSTAT):
@@ -161,7 +161,7 @@ u16 read16(u32 addr) {
 }
 
 void write8(u32 addr, u8 data) {
-    if (addr >= 0x1F80050) return;
+    if (addr >= 0x1F801050) return;
 
     switch (addr) {
         case static_cast<u32>(SIOReg::JOYFIFO):
@@ -229,7 +229,7 @@ void write8(u32 addr, u8 data) {
 }
 
 void write16(u32 addr, u16 data) {
-    if (addr >= 0x1F80050) return;
+    if (addr >= 0x1F801050) return;
 
     switch (addr) {
         case static_cast<u32>(SIOReg::JOYMODE):
