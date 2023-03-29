@@ -101,12 +101,22 @@ u64 idHBLANK, idScanline; // Scheduler
 void hblankEvent(i64 c) {
     timer::stepHBLANK();
 
-    scheduler::addEvent(idHBLANK, 0, CYCLES_PER_SCANLINE + c);
+    scheduler::addEvent(idHBLANK, 0, CYCLES_PER_SCANLINE);
 }
 
 /* Handles scanline events */
 void scanlineEvent(i64 c) {
     ++lineCounter;
+
+    if (lineCounter < SCANLINES_PER_VDRAW) {
+        if (lineCounter & 1) {
+            gpustat |= 1 << 31;
+        } else {
+            gpustat &= ~(1 << 31);
+        }
+    } else {
+        gpustat &= ~(1 << 31);
+    }
 
     if (lineCounter == SCANLINES_PER_VDRAW) {
         intc::sendInterrupt(Interrupt::VBLANK);
@@ -120,7 +130,7 @@ void scanlineEvent(i64 c) {
         lineCounter = 0;
     }
     
-    scheduler::addEvent(idScanline, 0, CYCLES_PER_SCANLINE + c);
+    scheduler::addEvent(idScanline, 0, CYCLES_PER_SCANLINE);
 }
 
 void setArgCount(int c) {
@@ -1156,8 +1166,6 @@ void writeGP0(u32 data) {
 }
 
 u32 readStatus() {
-    gpustat ^= 1 << 31;
-
     return gpustat;
 }
 
