@@ -100,11 +100,11 @@ void processEvents(i64 elapsedCycles) {
         if (!event->cyclesUntilEvent) {
             const auto id = event->id;
             const auto param = event->param;
-            const auto cyclesUntilEvent = event->cyclesUntilEvent;
+            //const auto cyclesUntilEvent = event->cyclesUntilEvent;
 
             event = events.erase(event);
 
-            registeredFuncs[id](param, cyclesUntilEvent);
+            registeredFuncs[id](param, 0);
         } else {
             event++;
         }
