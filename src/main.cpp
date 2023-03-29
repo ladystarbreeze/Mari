@@ -10,13 +10,13 @@
 int main(int argc, char **argv) {
     std::printf("[Mari      ] PlayStation emulator\n");
 
-    if (argc < 2) {
+    if (argc < 3) {
         std::printf("Usage: Mari /path/to/bios /path/to/iso\n");
 
         return -1;
     }
 
-    ps::init(argv[1], argv[2]);
+    ps::init(argv[1], argv[2], (argc == 4) ? argv[3] : NULL);
     ps::run();
 
     return 0;

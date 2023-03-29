@@ -54,19 +54,29 @@ u32 exp1Base = 0x1F000000, exp1Size;
 u32 exp2Base = 0x1F000000, exp2Size;
 u32 exp3Base = 0x1FA00000, exp3Size; // Base is fixed!!
 
+/* PS-EXE loading */
+char path[256];
+bool enableEXE = false;
+
 /* Returns true if address is in range [base;size] */
 bool inRange(u64 addr, u64 base, u64 size) {
     return (addr >= base) && (addr < (base + size));
 }
 
-void init(const char *biosPath) {
+void init(const char *biosPath, const char *exePath) {
     ram.resize(static_cast<int>(MemorySize::RAM));
+
+    if (exePath) {
+        std::strncpy(path, exePath, 256);
+
+        enableEXE = true;
+    }
 
     bios = loadBinary(biosPath);
 
     assert(bios.size() == static_cast<u64>(MemorySize::BIOS));
 
-    std::printf("[Bus       ] Init OK\n");
+    //std::printf("[Bus       ] Init OK\n");
 }
 
 u16 spuAddr, spuCnt;
@@ -74,7 +84,7 @@ u16 spuAddr, spuCnt;
 /* Reads a byte from the system bus */
 u8 read8(u32 addr) {
     if (inRange(addr, exp1Base, exp1Size)) {
-        std::printf("[Bus       ] 8-bit read @ 0x%08X (EXP1)\n", addr);
+        //std::printf("[Bus       ] 8-bit read @ 0x%08X (EXP1)\n", addr);
 
         return 0;
     }
@@ -116,13 +126,13 @@ u16 read16(u32 addr) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPU), static_cast<u32>(MemorySize::SPU))) {
         switch (addr) {
             case 0x1F801DA6:
-                std::printf("[Bus       ] 16-bit read @ 0x%08X (SPU_ADDR)\n", addr);
+                //std::printf("[Bus       ] 16-bit read @ 0x%08X (SPU_ADDR)\n", addr);
                 return spuAddr;
             case 0x1F801DAA:
-                std::printf("[Bus       ] 16-bit read @ 0x%08X (SPU_CNT)\n", addr);
+                //std::printf("[Bus       ] 16-bit read @ 0x%08X (SPU_CNT)\n", addr);
                 return spuCnt;
             default:
-                //std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X (SPU)\n", addr);
+                ////std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X (SPU)\n", addr);
                 break;
         }
 
@@ -131,11 +141,17 @@ u16 read16(u32 addr) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u16));
     } else {
         switch (addr) {
+            case 0x1F801014:
+                //std::printf("[Bus       ] 16-bit read @ SPU_DELAY\n");
+                return 0x31E1;
+            case 0x1F801016:
+                //std::printf("[Bus       ] 16-bit read @ SPU_DELAY\n");
+                return 0x2009;
             case 0x1F801070:
-                //std::printf("[Bus       ] 16-bit read @ I_STAT\n");
+                ////std::printf("[Bus       ] 16-bit read @ I_STAT\n");
                 return intc::readStat();
             case 0x1F801074:
-                //std::printf("[Bus       ] 16-bit read @ I_MASK\n");
+                ////std::printf("[Bus       ] 16-bit read @ I_MASK\n");
                 return intc::readMask();
             default:
                 std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X\n", addr);
@@ -164,25 +180,25 @@ u32 read32(u32 addr) {
     } else {
         switch (addr) {
             case 0x1F801014:
-                std::printf("[Bus       ] 32-bit read @ SPU_DELAY\n");
+                //std::printf("[Bus       ] 32-bit read @ SPU_DELAY\n");
                 return 0x200931E1;
             case 0x1F80101C:
-                std::printf("[Bus       ] 32-bit read @ EXP2_SIZE\n");
+                //std::printf("[Bus       ] 32-bit read @ EXP2_SIZE\n");
                 return exp2Size;
             case 0x1F801060:
-                std::printf("[Bus       ] 32-bit read @ RAM_SIZE\n");
+                //std::printf("[Bus       ] 32-bit read @ RAM_SIZE\n");
                 return 0x00000B88;
             case 0x1F801070:
-                //std::printf("[Bus       ] 32-bit read @ I_STAT\n");
+                ////std::printf("[Bus       ] 32-bit read @ I_STAT\n");
                 return intc::readStat();
             case 0x1F801074:
-                //std::printf("[Bus       ] 32-bit read @ I_MASK\n");
+                ////std::printf("[Bus       ] 32-bit read @ I_MASK\n");
                 return intc::readMask();
             case 0x1F801810:
-                std::printf("[Bus       ] 32-bit read @ GPUREAD\n");
+                //std::printf("[Bus       ] 32-bit read @ GPUREAD\n");
                 return gpu::readGPUREAD();
             case 0x1F801814:
-                //std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
+                ////std::printf("[Bus       ] Unhandled 32-bit read @ GP1\n");
                 return gpu::readStatus();
             case 0x1F801824:
                 return mdec::readStat();
@@ -200,9 +216,9 @@ u32 read32(u32 addr) {
 void write8(u32 addr, u8 data) {
     if (inRange(addr, exp2Base, exp2Size)) {
         if (addr == (exp2Base + 0x41)) {
-            std::printf("[PS        ] POST = 0x%02X\n", data);
+            //std::printf("[PS        ] POST = 0x%02X\n", data);
         } else {
-            std::printf("[Bus       ] 8-bit write @ 0x%08X (EXP2) = 0x%02X\n", addr, data);
+            //std::printf("[Bus       ] 8-bit write @ 0x%08X (EXP2) = 0x%02X\n", addr, data);
         }
 
         return;
@@ -241,26 +257,32 @@ void write16(u32 addr, u16 data) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPU), static_cast<u32>(MemorySize::SPU))) {
         switch (addr) {
             case 0x1F801DA6:
-                std::printf("[Bus       ] 16-bit write @ 0x%08X (SPU_ADDR) = 0x%04X\n", addr, data);
+                //std::printf("[Bus       ] 16-bit write @ 0x%08X (SPU_ADDR) = 0x%04X\n", addr, data);
 
                 spuAddr = data;
                 break;
             case 0x1F801DAA:
-                std::printf("[Bus       ] 16-bit write @ 0x%08X (SPU_CNT) = 0x%04X\n", addr, data);
+                //std::printf("[Bus       ] 16-bit write @ 0x%08X (SPU_CNT) = 0x%04X\n", addr, data);
 
                 spuCnt = data;
                 break;
             default:
-                //std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X (SPU) = 0x%04X\n", addr, data);
+                ////std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X (SPU) = 0x%04X\n", addr, data);
                 break;
         }
     } else {
         switch (addr) {
+            case 0x1F801014:
+                //std::printf("[Bus       ] 16-bit write @ SPU_DELAY = 0x%04X\n", data);
+                break;
+            case 0x1F801016:
+                //std::printf("[Bus       ] 16-bit write @ SPU_DELAY = 0x%04X\n", data);
+                break;
             case 0x1F801070:
-                //std::printf("[Bus       ] 16-bit write @ I_STAT = 0x%04X\n", data);
+                ////std::printf("[Bus       ] 16-bit write @ I_STAT = 0x%04X\n", data);
                 return intc::writeStat(data);
             case 0x1F801074:
-                std::printf("[Bus       ] 16-bit write @ I_MASK = 0x%04X\n", data);
+                //std::printf("[Bus       ] 16-bit write @ I_MASK = 0x%04X\n", data);
                 return intc::writeMask(data);
             default:
                 std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
@@ -283,58 +305,58 @@ void write32(u32 addr, u32 data) {
     } else {
         switch (addr) {
             case 0x1F801000:
-                std::printf("[Bus       ] 32-bit write @ EXP1_BASE = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ EXP1_BASE = 0x%08X\n", data);
 
                 exp1Base = (exp1Base & 0xFF000000) | (data & 0xFFFFFF);
                 break;
             case 0x1F801004:
-                std::printf("[Bus       ] 32-bit write @ EXP2_BASE = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ EXP2_BASE = 0x%08X\n", data);
 
                 exp2Base = (exp2Base & 0xFF000000) | (data & 0xFFFFFF);
                 break;
             case 0x1F801008:
-                std::printf("[Bus       ] 32-bit write @ EXP1_SIZE = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ EXP1_SIZE = 0x%08X\n", data);
 
                 exp1Size = 1 << ((data >> 16) & 0x1F);
                 break;
             case 0x1F80100C:
-                std::printf("[Bus       ] 32-bit write @ EXP3_SIZE = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ EXP3_SIZE = 0x%08X\n", data);
 
                 exp3Size = 1 << ((data >> 16) & 0x1F);
                 break;
             case 0x1F801010:
-                std::printf("[Bus       ] 32-bit write @ BIOS_DELAY = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ BIOS_DELAY = 0x%08X\n", data);
                 break;
             case 0x1F801014:
-                std::printf("[Bus       ] 32-bit write @ SPU_DELAY = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ SPU_DELAY = 0x%08X\n", data);
                 break;
             case 0x1F801018:
-                std::printf("[Bus       ] 32-bit write @ CDROM_DELAY = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ CDROM_DELAY = 0x%08X\n", data);
                 break;
             case 0x1F80101C:
-                std::printf("[Bus       ] 32-bit write @ EXP2_SIZE = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ EXP2_SIZE = 0x%08X\n", data);
 
                 exp2Size = 1 << ((data >> 16) & 0x1F);
                 break;
             case 0x1F801020:
-                std::printf("[Bus       ] 32-bit write @ COM_DELAY = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ COM_DELAY = 0x%08X\n", data);
                 break;
             case 0x1F801060:
-                std::printf("[Bus       ] 32-bit write @ RAM_SIZE = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ RAM_SIZE = 0x%08X\n", data);
                 break;
             case 0x1F801070:
-                //std::printf("[Bus       ] 32-bit write @ I_STAT = 0x%08X\n", data);
+                ////std::printf("[Bus       ] 32-bit write @ I_STAT = 0x%08X\n", data);
                 return intc::writeStat(data);
             case 0x1F801074:
-                std::printf("[Bus       ] 32-bit write @ I_MASK = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ I_MASK = 0x%08X\n", data);
                 return intc::writeMask(data);
             case 0x1F801810:
-                std::printf("[Bus       ] 32-bit write @ GP0 = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ GP0 = 0x%08X\n", data);
 
                 gpu::writeGP0(data);
                 break;
             case 0x1F801814:
-                std::printf("[Bus       ] 32-bit write @ GP1 = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ GP1 = 0x%08X\n", data);
 
                 gpu::writeGP1(data);
                 break;
@@ -343,7 +365,7 @@ void write32(u32 addr, u32 data) {
             case 0x1F801824:
                 return mdec::writeCtrl(data);
             case 0x1FFE0130:
-                std::printf("[Bus       ] 32-bit write @ CACHE_CONTROL = 0x%08X\n", data);
+                //std::printf("[Bus       ] 32-bit write @ CACHE_CONTROL = 0x%08X\n", data);
                 break;
             default:
                 std::printf("[Bus       ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
@@ -351,6 +373,53 @@ void write32(u32 addr, u32 data) {
                 exit(0);
         }
     }
+}
+
+/* Loads a PS-EXE, returns entry point */
+u32 loadEXE() {
+    std::printf("Loading PS-EXE...\n");
+
+    const auto exe = loadBinary(path);
+
+    if (std::strncmp((char *)exe.data(), "PS-X EXE", 8) != 0) {
+        std::printf("Invalid PS-EXE\n");
+
+        exit(0);
+    }
+
+    /* Get CPU register values */
+
+    u32 entry, gp, sp;
+
+    std::memcpy(&entry, &exe[0x10], 4);
+
+    std::memcpy(&gp, &exe[0x14], 4);
+    std::memcpy(&sp, &exe[0x30], 4);
+
+    if (sp != 0x801FFF00) {
+        std::printf("GP = 0x%08X, SP = 0x%08X\n", gp, sp);
+
+        exit(0);
+    }
+
+    /* Copy code to RAM */
+
+    u32 addr, size;
+
+    std::memcpy(&addr, &exe[0x18], 4);
+    std::memcpy(&size, &exe[0x1C], 4);
+
+    addr &= 0x1FFFFC;
+
+    std::memcpy(&ram[addr], &exe[0x800], size);
+
+    enableEXE = false;
+
+    return entry;
+}
+
+bool isEXEEnabled() {
+    return enableEXE;
 }
 
 }

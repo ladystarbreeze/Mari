@@ -21,6 +21,8 @@ using Exception = cop0::Exception;
 
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
+constexpr u32 SHELL_ENTRY = 0x80030000;
+
 constexpr auto doDisasm = false;
 
 /* --- CPU register definitions --- */
@@ -625,7 +627,15 @@ void iJALR(u32 instr) {
     const auto rd = getRd(instr);
     const auto rs = getRs(instr);
 
-    const auto target = regs[rs];
+    auto target = regs[rs];
+
+    if ((target == SHELL_ENTRY) && bus::isEXEEnabled()) {
+        target = bus::loadEXE();
+
+        set(CPUReg::GP, 0);
+        set(CPUReg::SP, 0x801FFF00);
+        set(CPUReg::S8, 0x801FFF00);
+    }
 
     doBranch(target, true, rd);
 
@@ -1516,7 +1526,7 @@ void init() {
     setPC(RESET_VECTOR);
 
     // Initialize coprocessors
-    // cop0::init();
+    cop0::init();
 
     std::printf("[CPU       ] Init OK\n");
 }

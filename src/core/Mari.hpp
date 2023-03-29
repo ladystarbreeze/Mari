@@ -9,7 +9,7 @@
 
 namespace ps {
 
-void init(const char *biosPath, const char *isoPath);
+void init(const char *biosPath, const char *isoPath, const char *exePath);
 void run();
 
 void update(const u8 *fb);

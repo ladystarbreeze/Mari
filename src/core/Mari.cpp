@@ -48,12 +48,12 @@ void initSDL() {
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR1555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
 }
 
-void init(const char *biosPath, const char *isoPath) {
+void init(const char *biosPath, const char *isoPath, const char *exePath) {
     std::printf("BIOS path: \"%s\"\nISO path: \"%s\"\n", biosPath, isoPath);
 
     scheduler::init();
 
-    bus::init(biosPath);
+    bus::init(biosPath, exePath);
     cdrom::init(isoPath);
     cpu::init();
     dmac::init();
@@ -72,7 +72,7 @@ void run() {
 
         scheduler::processEvents(runCycles);
 
-        cpu::step(runCycles >> 1); // 2 cycles per instruction
+        cpu::step(runCycles / 2); // 2 cycles per instruction
 
         timer::step(runCycles);
 
