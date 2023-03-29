@@ -26,7 +26,9 @@ constexpr i64 CPU_SPEED = 44100 * 0x300;
 constexpr i64 READ_TIME_SINGLE = CPU_SPEED / 75;
 constexpr i64 READ_TIME_DOUBLE = CPU_SPEED / (2 * 75);
 
-constexpr i64 INT3_TIME = 1000;
+constexpr u64 _1MS = CPU_SPEED / 1000;
+
+constexpr i64 INT3_TIME = _1MS;
 
 /* CDROM commands */
 enum Command {
@@ -97,6 +99,9 @@ u8 cmd; // Current CDROM  command
 std::queue<u8> paramFIFO, responseFIFO;
 std::queue<u8> queuedResp, lateResp;
 
+int queuedIRQ = 0;
+bool oldCmdWasSeekL = true;
+
 SeekParam seekParam;
 
 u8 readBuf[SECTOR_SIZE];
@@ -110,6 +115,8 @@ void readSector();
 void loadResponse();
 void pushResponse(u8);
 
+u8 getData8();
+
 /* BCD to char conversion */
 inline u32 toChar(u8 bcd) {
     assert(((bcd & 0xF0) <= 0x90) && ((bcd & 0xF) <= 9));
@@ -118,9 +125,19 @@ inline u32 toChar(u8 bcd) {
 }
 
 void sendIRQEvent(int irq) {
-    std::printf("[CDROM     ] INT%d\n", irq);
+    if (iFlags) {
+        assert(!queuedIRQ);
 
-    iFlags |= (u8)irq;
+        //std::printf("[CDROM     ] Queueing INT%d\n", irq);
+
+        queuedIRQ = irq;
+
+        return;
+    }
+
+    //std::printf("[CDROM     ] INT%d\n", irq);
+
+    iFlags = (u8)irq;
 
     if (iEnable & iFlags) intc::sendInterrupt(Interrupt::CDROM);
 
@@ -129,7 +146,7 @@ void sendIRQEvent(int irq) {
     /* If this is an INT1, read sector and send new INT1 */
     if (irq == 1) {
         // Send status
-        pushResponse(stat);
+        pushResponse(stat | static_cast<u8>(Status::Read));
 
         readSector();
 
@@ -151,7 +168,7 @@ void readSector() {
 
     seekTarget = mm + ss + sect - 150; // Starts at 2s, subtract 150 sectors to get start
 
-    std::printf("[CDROM     ] Seeking to [%02X:%02X:%02X] = %llu\n", s.mins, s.secs, s.sector, seekTarget);
+    //std::printf("[CDROM     ] Seeking to [%02X:%02X:%02X] = %llu\n", s.mins, s.secs, s.sector, seekTarget);
 
     file.seekg(seekTarget * SECTOR_SIZE, std::ios_base::beg);
 
@@ -172,7 +189,7 @@ void readSector() {
 
     if ((s.mins & 0xF) == 10) { s.mins += 0x10; s.mins &= 0xF0; }
 
-    std::printf("[CDROM     ] Next seek to [%02X:%02X:%02X]\n", s.mins, s.secs, s.sector);
+    //std::printf("[CDROM     ] Next seek to [%02X:%02X:%02X]\n", s.mins, s.secs, s.sector);
 }
 
 u8 readResponse() {
@@ -191,6 +208,10 @@ void pushLateResponse(u8 data) {
     lateResp.push(data);
 }
 
+void clearParameters() {
+    while (!paramFIFO.empty()) paramFIFO.pop();
+}
+
 void clearResponse() {
     while (!responseFIFO.empty()) responseFIFO.pop();
 
@@ -198,6 +219,8 @@ void clearResponse() {
     
     while (!lateResp.empty()) lateResp.pop();
 }
+
+void clearParameters();
 
 void loadResponse() {
     while (!queuedResp.empty()) {
@@ -215,7 +238,7 @@ void loadResponse() {
 
 /* Get BIOS Date */
 void cmdGetBIOSDate() {
-    std::printf("[CDROM     ] Get BIOS Date\n");
+    //std::printf("[CDROM     ] Get BIOS Date\n");
 
     // Send date
     pushResponse(0x96);
@@ -229,7 +252,17 @@ void cmdGetBIOSDate() {
 
 /* Get ID */
 void cmdGetID() {
-    std::printf("[CDROM     ] Get ID\n");
+    //std::printf("[CDROM     ] Get ID\n");
+
+    if (paramFIFO.size()) {
+        /* Too few/many parameters, send error */
+        clearParameters();
+
+        pushResponse(stat | static_cast<u8>(Status::Error));
+        pushResponse(0x20);
+
+        return scheduler::addEvent(idSendIRQ, 5, INT3_TIME);
+    }
 
     // Send status
     pushResponse(stat);
@@ -254,7 +287,19 @@ void cmdGetID() {
 
 /* Get Loc L - Returns position from header */
 void cmdGetLocL() {
-    std::printf("[CDROM     ] Get Loc L\n");
+    //std::printf("[CDROM     ] Get Loc L\n");
+
+    if (!oldCmdWasSeekL) {
+        /* Can't execute data mode GetLoc after audio seek, send error */
+        clearParameters();
+
+        pushResponse(stat | static_cast<u8>(Status::Error));
+        pushResponse(0x80);
+
+        return scheduler::addEvent(idSendIRQ, 5, INT3_TIME);
+    }
+
+    oldCmdWasSeekL = false;
 
     char buf[8];
 
@@ -270,7 +315,7 @@ void cmdGetLocL() {
 
 /* Get Loc P - Returns position from subchannel Q */
 void cmdGetLocP() {
-    std::printf("[CDROM     ] Get Loc P\n");
+    //std::printf("[CDROM     ] Get Loc P\n");
 
     // Send information
     pushResponse(0x01);
@@ -288,7 +333,17 @@ void cmdGetLocP() {
 
 /* Get Stat - Activate motor, set mode = 0x20, abort all commands */
 void cmdGetStat() {
-    std::printf("[CDROM     ] Get Stat\n");
+    //std::printf("[CDROM     ] Get Stat\n");
+
+    if (paramFIFO.size()) {
+        /* Too many parameters, send error */
+        clearParameters();
+
+        pushResponse(stat | static_cast<u8>(Status::Error));
+        pushResponse(0x20);
+
+        return scheduler::addEvent(idSendIRQ, 5, INT3_TIME);
+    }
 
     // Send status
     pushResponse(stat);
@@ -302,9 +357,29 @@ void cmdGetStat() {
 
 /* Get TD - Returns track start */
 void cmdGetTD() {
-    std::printf("[CDROM     ] Get TD\n");
+    //std::printf("[CDROM     ] Get TD\n");
 
-    paramFIFO.pop();
+    if (paramFIFO.size() != 1) {
+        /* Too few/many parameters, send error */
+        clearParameters();
+
+        pushResponse(stat | static_cast<u8>(Status::Error));
+        pushResponse(0x20);
+
+        return scheduler::addEvent(idSendIRQ, 5, INT3_TIME);
+    }
+
+    const auto track = paramFIFO.front(); paramFIFO.pop();
+
+    if (track > 0x26) {
+        /* Too few/many parameters, send error */
+        clearParameters();
+
+        pushResponse(stat | static_cast<u8>(Status::Error));
+        pushResponse(0x10);
+
+        return scheduler::addEvent(idSendIRQ, 5, INT3_TIME);
+    }
 
     // Send status
     pushResponse(stat);
@@ -317,7 +392,17 @@ void cmdGetTD() {
 
 /* Get TN - Returns first and last track number */
 void cmdGetTN() {
-    std::printf("[CDROM     ] Get TN\n");
+    //std::printf("[CDROM     ] Get TN\n");
+
+    if (paramFIFO.size()) {
+        /* Too many parameters, send error */
+        clearParameters();
+
+        pushResponse(stat | static_cast<u8>(Status::Error));
+        pushResponse(0x20);
+
+        return scheduler::addEvent(idSendIRQ, 5, INT3_TIME);
+    }
 
     // Send status
     pushResponse(stat);
@@ -330,16 +415,13 @@ void cmdGetTN() {
 
 /* Read TOC - Reread TOC */
 void cmdReadTOC() {
-    std::printf("[CDROM     ] Read TOC\n");
+    //std::printf("[CDROM     ] Read TOC\n");
 
     // Send status
     pushResponse(stat);
 
-    stat |= static_cast<u8>(Status::MotorOn);
-    stat |= static_cast<u8>(Status::Read);
-
     // Send status
-    pushLateResponse(stat);
+    pushLateResponse(stat | static_cast<u8>(Status::Read));
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
@@ -350,12 +432,22 @@ void cmdReadTOC() {
 
 /* Init - Activate motor, set mode = 0x20, abort all commands */
 void cmdInit() {
-    std::printf("[CDROM     ] Init\n");
+    //std::printf("[CDROM     ] Init\n");
+
+    if (paramFIFO.size()) {
+        /* Too many parameters, send error */
+        clearParameters();
+
+        pushResponse(stat | static_cast<u8>(Status::Error));
+        pushResponse(0x20);
+
+        return scheduler::addEvent(idSendIRQ, 5, INT3_TIME);
+    }
 
     stat = static_cast<u8>(Status::MotorOn);
 
     // Send mode
-    pushResponse(mode);
+    pushResponse(stat);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
@@ -363,15 +455,15 @@ void cmdInit() {
     mode = static_cast<u8>(Mode::FullSector);
 
     // Send mode
-    pushLateResponse(mode);
+    pushLateResponse(stat);
 
     // Send INT2
-    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 50000);
+    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 120 * _1MS);
 }
 
 /* Pause */
 void cmdPause() {
-    std::printf("[CDROM     ] Pause\n");
+    //std::printf("[CDROM     ] Pause\n");
 
     scheduler::removeEvent(idSendIRQ); // Kill all pending CDROM events
 
@@ -381,19 +473,10 @@ void cmdPause() {
     // Send status
     pushResponse(stat);
 
-    // Send INT3
+    // Send INT3 and INT2
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
+    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 70 * _1MS - 35 * _1MS * !!(mode & static_cast<u8>(Mode::Speed)));
 
-    /* Pause is faster if drive is already paused */
-    if (!(stat & (static_cast<u8>(Status::Play) | static_cast<u8>(Status::Read)))) {
-        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 20000);
-    } else {
-        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 5 * READ_TIME_SINGLE);
-    }
-
-    /* Pause drive */
-    stat &= ~static_cast<u8>(Status::Play);
-    stat &= ~static_cast<u8>(Status::Seek);
     stat &= ~static_cast<u8>(Status::Read);
 
     // Send status
@@ -402,7 +485,7 @@ void cmdPause() {
 
 /* ReadN - Read sector */
 void cmdReadN() {
-    std::printf("[CDROM     ] ReadN\n");
+    //std::printf("[CDROM     ] ReadN\n");
 
     // Send status
     pushResponse(stat);
@@ -410,23 +493,18 @@ void cmdReadN() {
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
-    // Send INT2
-    if (mode & static_cast<u8>(Mode::Speed)) {
-        scheduler::addEvent(idSendIRQ, 1, INT3_TIME + READ_TIME_DOUBLE);
-    } else {
-        scheduler::addEvent(idSendIRQ, 1, INT3_TIME + READ_TIME_SINGLE);
-    }
+    const auto int1Time = INT3_TIME + (mode & static_cast<u8>(Mode::Speed)) ? READ_TIME_DOUBLE : READ_TIME_SINGLE;
 
-    stat &= ~static_cast<u8>(Status::Seek);
-    stat |=  static_cast<u8>(Status::Read);
-    stat |=  static_cast<u8>(Status::MotorOn);
+    scheduler::addEvent(idSendIRQ, 1, int1Time);
+
+    stat |= static_cast<u8>(Status::Read);
 
     pushLateResponse(stat);
 }
 
 /* SeekL - Data mode seek */
 void cmdSeekL() {
-    std::printf("[CDROM     ] SeekL\n");
+    //std::printf("[CDROM     ] SeekL\n");
 
     // Send status
     pushResponse(stat);
@@ -434,20 +512,16 @@ void cmdSeekL() {
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
-    stat &= ~static_cast<u8>(Status::Read);
-    stat |=  static_cast<u8>(Status::Seek);
-    stat |=  static_cast<u8>(Status::MotorOn);
-
     // Send status
-    pushLateResponse(stat);
+    pushLateResponse(stat | static_cast<u8>(Status::Seek));
 
     // Send INT2
-    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 80000);
+    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 2 * _1MS);
 }
 
 /* Set Filter - Sets XA filter */
 void cmdSetFilter() {
-    std::printf("[CDROM     ] Set Filter\n");
+    //std::printf("[CDROM     ] Set Filter\n");
 
     paramFIFO.pop(); paramFIFO.pop();
 
@@ -460,7 +534,7 @@ void cmdSetFilter() {
 
 /* Set Loc - Sets seek parameters */
 void cmdSetLoc() {
-    std::printf("[CDROM     ] Set Loc\n");
+    //std::printf("[CDROM     ] Set Loc\n");
 
     // Send status
     pushResponse(stat);
@@ -474,9 +548,9 @@ void cmdSetLoc() {
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
-/* Set Mode - Sets CDROM  mode */
+/* Set Mode - Sets CDROM mode */
 void cmdSetMode() {
-    std::printf("[CDROM     ] Set Mode\n");
+    //std::printf("[CDROM     ] Set Mode\n");
 
     // Send status
     pushResponse(stat);
@@ -489,14 +563,12 @@ void cmdSetMode() {
 
 /* Stop */
 void cmdStop() {
-    std::printf("[CDROM     ] Stop\n");
+    //std::printf("[CDROM     ] Stop\n");
 
     scheduler::removeEvent(idSendIRQ); // Kill all pending CDROM events
 
     /* Clear response buffer(s) */
     clearResponse();
-
-    stat &= ~static_cast<u8>(Status::Read);
 
     // Send status
     pushResponse(stat);
@@ -506,8 +578,8 @@ void cmdStop() {
     scheduler::addEvent(idSendIRQ, 2, CPU_SPEED);
 
     stat &= ~static_cast<u8>(Status::MotorOn);
-    stat &= ~static_cast<u8>(Status::Seek);
-    stat &= ~static_cast<u8>(Status::Play);
+
+    stat &= ~static_cast<u8>(Status::Read);
 
     // Send status
     pushLateResponse(stat);
@@ -515,7 +587,7 @@ void cmdStop() {
 
 /* Unmute */
 void cmdUnmute() {
-    std::printf("[CDROM     ] Unmute\n");
+    //std::printf("[CDROM     ] Unmute\n");
 
     // Send status
     pushResponse(stat);
@@ -531,7 +603,7 @@ void doSubCmd() {
     switch (cmd) {
         case SubCommand::GetBIOSDate: cmdGetBIOSDate(); break;
         default:
-            std::printf("[CDROM     ] Unhandled sub command 0x%02X\n", cmd);
+            //std::printf("[CDROM     ] Unhandled sub command 0x%02X\n", cmd);
 
             exit(0);
     }
@@ -555,14 +627,14 @@ void doCmd(u8 data) {
         case Command::GetLocP  : cmdGetLocP(); break;
         case Command::GetTN    : cmdGetTN(); break;
         case Command::GetTD    : cmdGetTD(); break;
-        case Command::SeekL    : cmdSeekL(); break;
-        case Command::SeekP    : cmdSeekL(); break; // Should be fine?
+        case Command::SeekL    : oldCmdWasSeekL = true;  cmdSeekL(); break;
+        case Command::SeekP    : oldCmdWasSeekL = false; cmdSeekL(); break; // Should be fine?
         case Command::Test     : doSubCmd(); break;
         case Command::GetID    : cmdGetID(); break;
         case Command::ReadS    : cmdReadN(); break; // Should be fine?
         case Command::ReadTOC  : cmdReadTOC(); break;
         default:
-            std::printf("[CDROM     ] Unhandled command 0x%02X\n", cmd);
+            //std::printf("[CDROM     ] Unhandled command 0x%02X\n", cmd);
 
             exit(0);
     }
@@ -573,7 +645,7 @@ void init(const char *isoPath) {
     file.open(isoPath, std::ios::in | std::ios::binary);
 
     if (!file.is_open()) {
-        std::printf("[CDROM     ] Unable to open file \"%s\"\n", isoPath);
+        //std::printf("[CDROM     ] Unable to open file \"%s\"\n", isoPath);
 
         exit(0);
     }
@@ -588,39 +660,48 @@ u8 read(u32 addr) {
     switch (addr) {
         case 0x1F801800:
             {
-                //std::printf("[CDROM     ] 8-bit read @ STATUS\n");
+                ////std::printf("[CDROM     ] 8-bit read @ STATUS\n");
 
                 u8 data = index;
 
-                data |= paramFIFO.empty() << 3;        // Parameter FIFO empty
-                data |= (paramFIFO.size() != 16) << 4; // Parameter FIFO not full
-                data |= !responseFIFO.empty() << 5;    // Response FIFO not empty
-                data |= (readIdx < READ_SIZE) << 6;    // Data FIFO not empty
+                data |= paramFIFO.empty() << 3;                  // Parameter FIFO empty
+                data |= (paramFIFO.size() != 16) << 4;           // Parameter FIFO not full
+                data |= !responseFIFO.empty() << 5;              // Response FIFO not empty
+                data |= (readIdx && (readIdx < READ_SIZE)) << 6; // Data FIFO not empty
 
                 return data;
             }
         case 0x1F801801:
             {
-                std::printf("[CDROM     ] 8-bit read @ RESPONSE\n");
+                //std::printf("[CDROM     ] 8-bit read @ RESPONSE\n");
 
                 return readResponse();
+            }
+        case 0x1F801802:
+            {
+                const auto data = getData8();
+
+                //std::printf("[CDROM     ] 8-bit read @ DATA = 0x%02X\n", data);
+
+                return data;
             }
         case 0x1F801803:
             switch (index) {
                 case 0:
-                    std::printf("[CDROM     ] 8-bit read @ IE\n");
+                    //std::printf("[CDROM     ] 8-bit read @ IE\n");
                     return iEnable;
                 case 1:
-                    //std::printf("[CDROM     ] 8-bit read @ IF\n");
-                    return iFlags;
+                    ////std::printf("[CDROM     ] 8-bit read @ IF = 0x%02X\n", iFlags);
+
+                    return iFlags | 0xE0;
                 default:
-                    std::printf("[CDROM     ] Unhandled 8-bit read @ 0x%08X.%u\n", addr, index);
+                    //std::printf("[CDROM     ] Unhandled 8-bit read @ 0x%08X.%u\n", addr, index);
 
                     exit(0);
             }
             break;
         default:
-            std::printf("[CDROM     ] Unhandled 8-bit read @ 0x%08X\n", addr);
+            //std::printf("[CDROM     ] Unhandled 8-bit read @ 0x%08X\n", addr);
 
             exit(0);
     }
@@ -629,22 +710,22 @@ u8 read(u32 addr) {
 void write(u32 addr, u8 data) {
     switch (addr) {
         case 0x1F801800:
-            //std::printf("[CDROM     ] 8-bit write @ INDEX = 0x%02X\n", data);
+            ////std::printf("[CDROM     ] 8-bit write @ INDEX = 0x%02X\n", data);
 
             index = data & 3;
             break;
         case 0x1F801801:
             switch (index) {
                 case 0:
-                    std::printf("[CDROM     ] 8-bit write @ CMD = 0x%02X\n", data);
+                    //std::printf("[CDROM     ] 8-bit write @ CMD = 0x%02X\n", data);
 
                     doCmd(data);
                     break;
                 case 3:
-                    std::printf("[CDROM     ] 8-bit write @ VOLR->L = 0x%02X\n", data);
+                    //std::printf("[CDROM     ] 8-bit write @ VOLR->L = 0x%02X\n", data);
                     break;
                 default:
-                    std::printf("[CDROM     ] Unhandled 8-bit write @ 0x%08X.%u = 0x%02X\n", addr, index, data);
+                    //std::printf("[CDROM     ] Unhandled 8-bit write @ 0x%08X.%u = 0x%02X\n", addr, index, data);
 
                     exit(0);
             }
@@ -652,25 +733,25 @@ void write(u32 addr, u8 data) {
         case 0x1F801802:
             switch (index) {
                 case 0:
-                    std::printf("[CDROM     ] 8-bit write @ PARAM = 0x%02X\n", data);
+                    //std::printf("[CDROM     ] 8-bit write @ PARAM = 0x%02X\n", data);
 
                     assert(paramFIFO.size() < 16);
 
                     paramFIFO.push(data);
                     break;
                 case 1:
-                    std::printf("[CDROM     ] 8-bit write @ IE = 0x%02X\n", data);
+                    //std::printf("[CDROM     ] 8-bit write @ IE = 0x%02X\n", data);
 
                     iEnable = data & 0x1F;
                     break;
                 case 2:
-                    std::printf("[CDROM     ] 8-bit write @ VOLL->L = 0x%02X\n", data);
+                    //std::printf("[CDROM     ] 8-bit write @ VOLL->L = 0x%02X\n", data);
                     break;
                 case 3:
-                    std::printf("[CDROM     ] 8-bit write @ VOLR->R = 0x%02X\n", data);
+                    //std::printf("[CDROM     ] 8-bit write @ VOLR->R = 0x%02X\n", data);
                     break;
                 default:
-                    std::printf("[CDROM     ] Unhandled 8-bit write @ 0x%08X.%u = 0x%02X\n", addr, index, data);
+                    //std::printf("[CDROM     ] Unhandled 8-bit write @ 0x%08X.%u = 0x%02X\n", addr, index, data);
 
                     exit(0);
             }
@@ -678,42 +759,61 @@ void write(u32 addr, u8 data) {
         case 0x1F801803:
             switch (index) {
                 case 0:
-                    std::printf("[CDROM     ] 8-bit write @ REQUEST = 0x%02X\n", data);
+                    //std::printf("[CDROM     ] 8-bit write @ REQUEST = 0x%02X\n", data);
 
                     assert(!(data & (1 << 5)));
                     break;
                 case 1:
-                    std::printf("[CDROM     ] 8-bit write @ IF = 0x%02X\n", data);
+                    //std::printf("[CDROM     ] 8-bit write @ IF = 0x%02X\n", data);
 
                     iFlags &= (~data & 0x1F);
+
+                    if (!iFlags && queuedIRQ) {
+                        // Send queued INT
+                        scheduler::addEvent(idSendIRQ, queuedIRQ, _1MS);
+
+                        queuedIRQ = 0;
+                    }
                     break;
                 case 2:
-                    std::printf("[CDROM     ] 8-bit write @ VOLL->R = 0x%02X\n", data);
+                    //std::printf("[CDROM     ] 8-bit write @ VOLL->R = 0x%02X\n", data);
                     break;
                 case 3:
-                    std::printf("[CDROM     ] 8-bit write @ APPLYVOL = 0x%02X\n", data);
+                    //std::printf("[CDROM     ] 8-bit write @ APPLYVOL = 0x%02X\n", data);
                     break;
                 default:
-                    std::printf("[CDROM     ] Unhandled 8-bit write @ 0x%08X.%u = 0x%02X\n", addr, index, data);
+                    //std::printf("[CDROM     ] Unhandled 8-bit write @ 0x%08X.%u = 0x%02X\n", addr, index, data);
 
                     exit(0);
             }
             break;
         default:
-            std::printf("[CDROM     ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
+            //std::printf("[CDROM     ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
 
             exit(0);
     }
 }
 
+u8 getData8() {
+    assert(readIdx && (readIdx < READ_SIZE));
+
+    const auto data = readBuf[readIdx++];
+
+    if (readIdx == READ_SIZE) readIdx = 0;
+
+    return data;
+}
+
 u32 getData32() {
-    assert(readIdx < READ_SIZE);
+    assert(readIdx && (readIdx < READ_SIZE));
 
     u32 data;
 
     std::memcpy(&data, &readBuf[readIdx], 4);
 
     readIdx += 4;
+
+    if (readIdx == READ_SIZE) readIdx = 0;
 
     return data;
 }
