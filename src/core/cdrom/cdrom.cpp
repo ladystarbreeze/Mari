@@ -26,7 +26,7 @@ constexpr i64 CPU_SPEED = 44100 * 0x300;
 constexpr i64 READ_TIME_SINGLE = CPU_SPEED / 75;
 constexpr i64 READ_TIME_DOUBLE = CPU_SPEED / (2 * 75);
 
-constexpr i64 INT3_TIME = 10000;
+constexpr i64 INT3_TIME = 1000;
 
 /* CDROM commands */
 enum Command {
@@ -95,6 +95,7 @@ u8 index; // CDROM  register index
 u8 cmd; // Current CDROM  command
 
 std::queue<u8> paramFIFO, responseFIFO;
+std::queue<u8> queuedResp, lateResp;
 
 SeekParam seekParam;
 
@@ -106,6 +107,8 @@ u64 seekTarget;
 u64 idSendIRQ; // Scheduler
 
 void readSector();
+void loadResponse();
+void pushResponse(u8);
 
 /* BCD to char conversion */
 inline u32 toChar(u8 bcd) {
@@ -121,10 +124,12 @@ void sendIRQEvent(int irq) {
 
     if (iEnable & iFlags) intc::sendInterrupt(Interrupt::CDROM);
 
+    loadResponse();
+
     /* If this is an INT1, read sector and send new INT1 */
     if (irq == 1) {
         // Send status
-        responseFIFO.push(stat);
+        pushResponse(stat);
 
         readSector();
 
@@ -178,40 +183,70 @@ u8 readResponse() {
     return data;
 }
 
+void pushResponse(u8 data) {
+    queuedResp.push(data);
+}
+
+void pushLateResponse(u8 data) {
+    lateResp.push(data);
+}
+
+void clearResponse() {
+    while (!responseFIFO.empty()) responseFIFO.pop();
+
+    while (!queuedResp.empty()) queuedResp.pop();
+    
+    while (!lateResp.empty()) lateResp.pop();
+}
+
+void loadResponse() {
+    while (!queuedResp.empty()) {
+        responseFIFO.push(queuedResp.front());
+
+        queuedResp.pop();
+    }
+
+    while (!lateResp.empty()) {
+        queuedResp.push(lateResp.front());
+
+        lateResp.pop();
+    }
+}
+
 /* Get BIOS Date */
 void cmdGetBIOSDate() {
     std::printf("[CDROM     ] Get BIOS Date\n");
 
     // Send date
-    responseFIFO.push(0x96);
-    responseFIFO.push(0x09);
-    responseFIFO.push(0x12);
-    responseFIFO.push(0xC2);
+    pushResponse(0x96);
+    pushResponse(0x09);
+    pushResponse(0x12);
+    pushResponse(0xC2);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 }
 
-/* Get ID - Activate motor, set mode = 0x20, abort all commands */
+/* Get ID */
 void cmdGetID() {
     std::printf("[CDROM     ] Get ID\n");
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
     /* Licensed, Mode2 */
-    responseFIFO.push(0x02);
-    responseFIFO.push(0x00);
-    responseFIFO.push(0x20);
-    responseFIFO.push(0x00);
+    pushLateResponse(0x02);
+    pushLateResponse(0x00);
+    pushLateResponse(0x20);
+    pushLateResponse(0x00);
 
-    responseFIFO.push('M');
-    responseFIFO.push('A');
-    responseFIFO.push('R');
-    responseFIFO.push('I');
+    pushLateResponse('M');
+    pushLateResponse('A');
+    pushLateResponse('R');
+    pushLateResponse('I');
 
     // Send INT2
     scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 30000);
@@ -227,7 +262,7 @@ void cmdGetLocL() {
     file.read(buf, 8);
 
     // Send information
-    for (int i = 0; i < 8; i++) responseFIFO.push(buf[i]);
+    for (int i = 0; i < 8; i++) pushResponse(buf[i]);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
@@ -238,14 +273,14 @@ void cmdGetLocP() {
     std::printf("[CDROM     ] Get Loc P\n");
 
     // Send information
-    responseFIFO.push(0x01);
-    responseFIFO.push(0x01);
-    responseFIFO.push(seekParam.mins);
-    responseFIFO.push(seekParam.secs);
-    responseFIFO.push(seekParam.sector);
-    responseFIFO.push(seekParam.mins);
-    responseFIFO.push(seekParam.secs);
-    responseFIFO.push(seekParam.sector);
+    pushResponse(0x01);
+    pushResponse(0x01);
+    pushResponse(seekParam.mins);
+    pushResponse(seekParam.secs);
+    pushResponse(seekParam.sector);
+    pushResponse(seekParam.mins);
+    pushResponse(seekParam.secs);
+    pushResponse(seekParam.sector);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
@@ -256,7 +291,7 @@ void cmdGetStat() {
     std::printf("[CDROM     ] Get Stat\n");
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     // Clear shell open flag
     stat &= ~static_cast<u8>(Status::ShellOpen);
@@ -272,9 +307,9 @@ void cmdGetTD() {
     paramFIFO.pop();
 
     // Send status
-    responseFIFO.push(stat);
-    responseFIFO.push(0);
-    responseFIFO.push(0);
+    pushResponse(stat);
+    pushResponse(0);
+    pushResponse(0);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
@@ -285,9 +320,9 @@ void cmdGetTN() {
     std::printf("[CDROM     ] Get TN\n");
 
     // Send status
-    responseFIFO.push(stat);
-    responseFIFO.push(0x01);
-    responseFIFO.push(0x01);
+    pushResponse(stat);
+    pushResponse(0x01);
+    pushResponse(0x01);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
@@ -298,13 +333,13 @@ void cmdReadTOC() {
     std::printf("[CDROM     ] Read TOC\n");
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     stat |= static_cast<u8>(Status::MotorOn);
     stat |= static_cast<u8>(Status::Read);
 
     // Send status
-    responseFIFO.push(stat);
+    pushLateResponse(stat);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
@@ -317,21 +352,21 @@ void cmdReadTOC() {
 void cmdInit() {
     std::printf("[CDROM     ] Init\n");
 
-    // Send old mode
-    responseFIFO.push(mode);
+    stat = static_cast<u8>(Status::MotorOn);
+
+    // Send mode
+    pushResponse(mode);
 
     // Send INT3
-    scheduler::addEvent(idSendIRQ, 3, 80000);
-
-    stat |= static_cast<u8>(Status::MotorOn);
+    scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
     mode = static_cast<u8>(Mode::FullSector);
 
-    // Send new mode
-    responseFIFO.push(mode);
+    // Send mode
+    pushLateResponse(mode);
 
     // Send INT2
-    scheduler::addEvent(idSendIRQ, 2, 80000 + 20000);
+    scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 50000);
 }
 
 /* Pause */
@@ -340,28 +375,29 @@ void cmdPause() {
 
     scheduler::removeEvent(idSendIRQ); // Kill all pending CDROM events
 
-    /* Clear response buffer */
-    while (!responseFIFO.empty()) responseFIFO.pop();
+    /* Clear response buffer(s) */
+    clearResponse();
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
     /* Pause is faster if drive is already paused */
     if (!(stat & (static_cast<u8>(Status::Play) | static_cast<u8>(Status::Read)))) {
-        scheduler::addEvent(idSendIRQ, 2, INT3_TIME);
+        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 20000);
     } else {
-        scheduler::addEvent(idSendIRQ, 2, 5 * READ_TIME_SINGLE);
+        scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 5 * READ_TIME_SINGLE);
     }
 
     /* Pause drive */
     stat &= ~static_cast<u8>(Status::Play);
+    stat &= ~static_cast<u8>(Status::Seek);
     stat &= ~static_cast<u8>(Status::Read);
 
     // Send status
-    responseFIFO.push(stat);
+    pushLateResponse(stat);
 }
 
 /* ReadN - Read sector */
@@ -369,20 +405,23 @@ void cmdReadN() {
     std::printf("[CDROM     ] ReadN\n");
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
-    stat &= ~static_cast<u8>(Status::Seek);
-    stat |=  static_cast<u8>(Status::Read);
-
     // Send INT2
-    if (stat & static_cast<u8>(Mode::Speed)) {
+    if (mode & static_cast<u8>(Mode::Speed)) {
         scheduler::addEvent(idSendIRQ, 1, INT3_TIME + READ_TIME_DOUBLE);
     } else {
         scheduler::addEvent(idSendIRQ, 1, INT3_TIME + READ_TIME_SINGLE);
     }
+
+    stat &= ~static_cast<u8>(Status::Seek);
+    stat |=  static_cast<u8>(Status::Read);
+    stat |=  static_cast<u8>(Status::MotorOn);
+
+    pushLateResponse(stat);
 }
 
 /* SeekL - Data mode seek */
@@ -390,15 +429,17 @@ void cmdSeekL() {
     std::printf("[CDROM     ] SeekL\n");
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
 
-    stat |= static_cast<u8>(Status::Seek);
+    stat &= ~static_cast<u8>(Status::Read);
+    stat |=  static_cast<u8>(Status::Seek);
+    stat |=  static_cast<u8>(Status::MotorOn);
 
     // Send status
-    responseFIFO.push(stat);
+    pushLateResponse(stat);
 
     // Send INT2
     scheduler::addEvent(idSendIRQ, 2, INT3_TIME + 80000);
@@ -411,7 +452,7 @@ void cmdSetFilter() {
     paramFIFO.pop(); paramFIFO.pop();
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
@@ -422,7 +463,7 @@ void cmdSetLoc() {
     std::printf("[CDROM     ] Set Loc\n");
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     /* Set minutes, seconds, sector */
     seekParam.mins   = paramFIFO.front(); paramFIFO.pop();
@@ -438,7 +479,7 @@ void cmdSetMode() {
     std::printf("[CDROM     ] Set Mode\n");
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     mode = paramFIFO.front(); paramFIFO.pop();
 
@@ -452,22 +493,24 @@ void cmdStop() {
 
     scheduler::removeEvent(idSendIRQ); // Kill all pending CDROM events
 
-    /* Clear response buffer */
-    while (!responseFIFO.empty()) responseFIFO.pop();
+    /* Clear response buffer(s) */
+    clearResponse();
 
-    stat &= ~(1 << 5);
+    stat &= ~static_cast<u8>(Status::Read);
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
     scheduler::addEvent(idSendIRQ, 2, CPU_SPEED);
 
-    stat &= ~(1 << 1);
+    stat &= ~static_cast<u8>(Status::MotorOn);
+    stat &= ~static_cast<u8>(Status::Seek);
+    stat &= ~static_cast<u8>(Status::Play);
 
     // Send status
-    responseFIFO.push(stat);
+    pushLateResponse(stat);
 }
 
 /* Unmute */
@@ -475,7 +518,7 @@ void cmdUnmute() {
     std::printf("[CDROM     ] Unmute\n");
 
     // Send status
-    responseFIFO.push(stat);
+    pushResponse(stat);
 
     // Send INT3
     scheduler::addEvent(idSendIRQ, 3, INT3_TIME);
