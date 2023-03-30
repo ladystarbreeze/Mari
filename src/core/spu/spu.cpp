@@ -44,6 +44,7 @@ enum class SPUReg {
     PMON    = 0x1F801D90,
     NON     = 0x1F801D94,
     REVON   = 0x1F801D98,
+    VON     = 0x1F801D9C,
     REVADDR = 0x1F801DA2,
     SPUADDR = 0x1F801DA6,
     SPUDATA = 0x1F801DA8,
@@ -54,6 +55,8 @@ enum class SPUReg {
     CDVOLR  = 0x1F801DB2,
     EVOLL   = 0x1F801DB4,
     EVOLR   = 0x1F801DB6,
+    CVOLL   = 0x1F801DB8,
+    CVOLR   = 0x1F801DBA,
 };
 
 /* SPU control */
@@ -323,6 +326,18 @@ u16 read(u32 addr) {
             case static_cast<u32>(SPUReg::KOFF) + 2:
                 std::printf("[SPU       ] 16-bit read @ KOFF_HI\n");
                 return koff >> 16;
+            case static_cast<u32>(SPUReg::NON):
+                std::printf("[SPU       ] 16-bit read @ NON_LO\n");
+                return 0;
+            case static_cast<u32>(SPUReg::NON) + 2:
+                std::printf("[SPU       ] 16-bit read @ NON_HI\n");
+                return 0;
+            case static_cast<u32>(SPUReg::REVON):
+                std::printf("[SPU       ] 16-bit read @ REVON_LO\n");
+                return 0;
+            case static_cast<u32>(SPUReg::REVON) + 2:
+                std::printf("[SPU       ] 16-bit read @ REVON_HI\n");
+                return 0;
             default:
                 std::printf("[SPU       ] Unhandled 16-bit voice control read @ 0x%08X\n", addr);
 
@@ -330,6 +345,9 @@ u16 read(u32 addr) {
         }
     } else if (inRange(addr, SPU_BASE + 0x1A2, 0x1E)) { // SPU control
         switch (addr) {
+            case static_cast<u32>(SPUReg::SPUADDR):
+                std::printf("[SPU       ] 16-bit read @ SPUADDR\n");
+                return spuaddr;
             case static_cast<u32>(SPUReg::SPUCNT):
                 std::printf("[SPU       ] 16-bit read @ SPUCNT\n");
 
@@ -359,6 +377,12 @@ u16 read(u32 addr) {
                 data |= spustat.busy  << 10;
                 data |= spustat.cbuf  << 11;
                 break;
+            case static_cast<u32>(SPUReg::CVOLL):
+                std::printf("[SPU       ] 16-bit read @ CVOLL\n");
+                return 0;
+            case static_cast<u32>(SPUReg::CVOLR):
+                std::printf("[SPU       ] 16-bit read @ CVOLR\n");
+                return 0;
             default:
                 std::printf("[SPU       ] Unhandled control 16-bit read @ 0x%08X\n", addr);
 
@@ -469,6 +493,12 @@ void write(u32 addr, u16 data) {
                 break;
             case static_cast<u32>(SPUReg::REVON) + 2:
                 std::printf("[SPU       ] 16-bit write @ REVON_HI = 0x%04X\n", data);
+                break;
+            case static_cast<u32>(SPUReg::VON):
+                std::printf("[SPU       ] 16-bit write @ VON_LO = 0x%04X\n", data);
+                break;
+            case static_cast<u32>(SPUReg::VON) + 2:
+                std::printf("[SPU       ] 16-bit write @ VON_HI = 0x%04X\n", data);
                 break;
             default:
                 std::printf("[SPU       ] Unhandled 16-bit voice control write @ 0x%08X = 0x%04X\n", addr, data);
