@@ -104,7 +104,7 @@ int soundIdx = 0;
 SPUCNT  spucnt;
 SPUSTAT spustat;
 
-u32 kon;
+u32 kon, koff;
 
 u32 spuaddr, caddr; // SPU address, current address
 
@@ -119,11 +119,13 @@ bool inRange(u64 addr, u64 base, u64 size) {
 
 /* Steps the SPU, calculates current sample */
 void step() {
+    sound[soundIdx] = 0;
+
     if (spucnt.spuen && spucnt.unmute) {
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 24; i++) {
             auto &v = voices[i];
 
-            if (!v.on) { sound[soundIdx++] = 0; continue; }
+            if (!v.on || !v.pitch) continue;
 
             if (!v.hasBlock) {
                 /* Load new ADPCM block */
@@ -131,24 +133,6 @@ void step() {
                 std::memcpy(v.adpcmBlock, &ram[v.caddr], 16);
 
                 v.caddr += 16;
-
-                const auto flags = v.adpcmBlock[1];
-
-                if (flags & (1 << 0)) {
-                    v.caddr = 8 * v.loopaddr;
-
-                    if (flags & (1 << 1)) {
-                        /* TODO: force release */
-                    }
-
-                    /* TODO: set ENDX */
-
-                    v.on = false;
-                }
-
-                if (flags & (1 << 2)) {
-                    v.caddr = 8 * v.loopaddr;
-                }
 
                 v.hasBlock = true;
             }
@@ -174,20 +158,48 @@ void step() {
                     v.s[i] = v.s[i + 1];
                 }
 
-                v.s[3] = 128 * (i8)((v.adpcmBlock[2 + (adpcmIdx >> 1)] >> (4 * (adpcmIdx & 1))) << 4);
+                v.s[3] = 64 * (i16)(i8)((v.adpcmBlock[2 + (adpcmIdx >> 1)] >> (4 * (adpcmIdx & 1))) << 4);
 
-                sound[soundIdx++] = gauss::interpolate(v.pitchCounter >> 3, v.s[0], v.s[1], v.s[2], v.s[3]);
+                sound[soundIdx] += gauss::interpolate(v.pitchCounter >> 3, v.s[0], v.s[1], v.s[2], v.s[3]);
             } else {
+                const auto flags = v.adpcmBlock[1];
+
+                if (flags & (1 << 2)) {
+                    v.loopaddr = v.addr;
+                }
+
+                switch (flags & 3) {
+                    case 0: case 2:
+                        break;
+                    case 3: case 1:
+                        v.caddr = v.loopaddr;
+
+                        v.on = false;
+                        break;
+                }
+
                 v.pitchCounter = 0;
 
                 v.hasBlock = false;
             }
         }
-    } else {
-        sound[soundIdx++] = 0;
     }
 
+    soundIdx++;
+
     scheduler::addEvent(idStep, 0, SPU_RATE);
+}
+
+/* Handle Key Off event */
+void doKOFF() {
+    for (int i = 0; i < 24; i++) {
+        auto &v = voices[i];
+
+        if (koff & (1 << i)) {
+            /* TODO: ADSR */
+            v.on = false;
+        }
+    }
 }
 
 /* Handle Key On event */
@@ -301,16 +313,16 @@ u16 read(u32 addr) {
         switch (addr) {
             case static_cast<u32>(SPUReg::KON):
                 std::printf("[SPU       ] 16-bit read @ KON_LO\n");
-                return 0;
+                return kon;
             case static_cast<u32>(SPUReg::KON) + 2:
                 std::printf("[SPU       ] 16-bit read @ KON_HI\n");
-                return 0;
+                return kon >> 16;
             case static_cast<u32>(SPUReg::KOFF):
                 std::printf("[SPU       ] 16-bit read @ KOFF_LO\n");
-                return 0;
+                return koff;
             case static_cast<u32>(SPUReg::KOFF) + 2:
                 std::printf("[SPU       ] 16-bit read @ KOFF_HI\n");
-                return 0;
+                return koff >> 16;
             default:
                 std::printf("[SPU       ] Unhandled 16-bit voice control read @ 0x%08X\n", addr);
 
@@ -419,24 +431,26 @@ void write(u32 addr, u16 data) {
             case static_cast<u32>(SPUReg::KON):
                 std::printf("[SPU       ] 16-bit write @ KON_LO = 0x%04X\n", data);
 
-                /* TODO: handle key on events */
+                kon = (kon & 0xFFFF0000) | data;
                 break;
             case static_cast<u32>(SPUReg::KON) + 2:
                 std::printf("[SPU       ] 16-bit write @ KON_HI = 0x%04X\n", data);
 
-                /* TODO: handle key on events */
+                kon = (kon & 0xFFFF) | (data << 16);
+
+                doKON();
                 break;
             case static_cast<u32>(SPUReg::KOFF):
                 std::printf("[SPU       ] 16-bit write @ KOFF_LO = 0x%04X\n", data);
 
-                kon = (kon & 0xFFFF0000) | data;
+                koff = (koff & 0xFFFF0000) | data;
                 break;
             case static_cast<u32>(SPUReg::KOFF) + 2:
                 std::printf("[SPU       ] 16-bit write @ KOFF_HI = 0x%04X\n", data);
 
-                kon = (kon & 0xFFFF) | (data << 16);
+                koff = (koff & 0xFFFF) | (data << 16);
 
-                doKON();
+                doKOFF();
                 break;
             case static_cast<u32>(SPUReg::PMON):
                 std::printf("[SPU       ] 16-bit write @ PMON_LO = 0x%04X\n", data);
