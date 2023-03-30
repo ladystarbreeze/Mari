@@ -35,6 +35,7 @@ enum class SPUReg {
     ADDR    = 0x1F801C06,
     ADSR    = 0x1F801C08,
     ADSRVOL = 0x1F801C0C,
+    LOOP    = 0x1F801C0E,
     MVOLL   = 0x1F801D80,
     MVOLR   = 0x1F801D82,
     VLOUT   = 0x1F801D84,
@@ -283,6 +284,8 @@ u16 read(u32 addr) {
     if (addr < static_cast<u32>(SPUReg::MVOLL)) { // SPU voices
         const auto vID = (addr >> 4) & 0x1F;
 
+        auto &v = voices[vID];
+
         switch (addr & ~(0x1F << 4)) {
             case static_cast<u32>(SPUReg::VOLL):
                 std::printf("[SPU       ] 16-bit read @ V%u_VOLL\n", vID);
@@ -292,10 +295,10 @@ u16 read(u32 addr) {
                 break;
             case static_cast<u32>(SPUReg::PITCH):
                 std::printf("[SPU       ] 16-bit read @ V%u_PITCH\n", vID);
-                break;
+                return v.pitch;
             case static_cast<u32>(SPUReg::ADDR):
                 std::printf("[SPU       ] 16-bit read @ V%u_ADDR\n", vID);
-                break;
+                return v.addr;
             case static_cast<u32>(SPUReg::ADSR):
                 std::printf("[SPU       ] 16-bit read @ V%u_ADSR_HI\n", vID);
                 break;
@@ -303,7 +306,7 @@ u16 read(u32 addr) {
                 std::printf("[SPU       ] 16-bit read @ V%u_ADSR_HI\n", vID);
                 break;
             case static_cast<u32>(SPUReg::ADSRVOL):
-                std::printf("[SPU       ] 16-bit read @ V%u_ADSRVOL\n", vID);
+                //std::printf("[SPU       ] 16-bit read @ V%u_ADSRVOL\n", vID);
                 break;
             default:
                 std::printf("[SPU       ] Unhandled 16-bit voice %u read @ 0x%08X\n", vID, addr);
@@ -426,6 +429,14 @@ void write(u32 addr, u16 data) {
             case static_cast<u32>(SPUReg::ADSR) + 2:
                 std::printf("[SPU       ] 16-bit write @ V%u_ADSR_HI = 0x%04X\n", vID, data);
                 break;
+            case static_cast<u32>(SPUReg::ADSRVOL):
+                std::printf("[SPU       ] 16-bit write @ V%u_ADSRVOL = 0x%04X\n", vID, data);
+                break;
+            case static_cast<u32>(SPUReg::LOOP):
+                std::printf("[SPU       ] 16-bit write @ V%u_LOOP = 0x%04X\n", vID, data);
+
+                v.loopaddr = 8 * data;
+                break;
             default:
                 std::printf("[SPU       ] Unhandled 16-bit voice %u write @ 0x%08X = 0x%04X\n", vID, addr, data);
 
@@ -513,7 +524,7 @@ void write(u32 addr, u16 data) {
             case static_cast<u32>(SPUReg::SPUADDR):
                 std::printf("[SPU       ] 16-bit write @ SPUADDR = 0x%04X\n", data);
 
-                spuaddr = data & 0xFFFF;
+                spuaddr = data;
                 
                 caddr = 8 * spuaddr;
                 break;
