@@ -21,6 +21,7 @@ set(SOURCES
     src/core/gpu/gpu.cpp
     src/core/mdec/mdec.cpp
     src/core/sio/sio.cpp
+    src/core/spu/spu.cpp
     src/core/timer/timer.cpp
 )
 
@@ -38,7 +39,9 @@ set(HEADERS
     src/core/dmac/dmac.hpp
     src/core/gpu/gpu.hpp
     src/core/mdec/mdec.hpp
-    src/core/sio/sio.cpp
+    src/core/sio/sio.hpp
+    src/core/spu/gauss.hpp
+    src/core/spu/spu.hpp
     src/core/timer/timer.hpp
 )
 

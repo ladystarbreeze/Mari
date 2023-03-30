@@ -13,6 +13,7 @@
 #include "../gpu/gpu.hpp"
 #include "../mdec/mdec.hpp"
 #include "../sio/sio.hpp"
+#include "../spu/spu.hpp"
 #include "../timer/timer.hpp"
 
 #include "../../common/file.hpp"
@@ -79,8 +80,6 @@ void init(const char *biosPath, const char *exePath) {
     //std::printf("[Bus       ] Init OK\n");
 }
 
-u16 spuAddr, spuCnt;
-
 /* Reads a byte from the system bus */
 u8 read8(u32 addr) {
     if (inRange(addr, exp1Base, exp1Size)) {
@@ -124,19 +123,7 @@ u16 read16(u32 addr) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
         return timer::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPU), static_cast<u32>(MemorySize::SPU))) {
-        switch (addr) {
-            case 0x1F801DA6:
-                //std::printf("[Bus       ] 16-bit read @ 0x%08X (SPU_ADDR)\n", addr);
-                return spuAddr;
-            case 0x1F801DAA:
-                //std::printf("[Bus       ] 16-bit read @ 0x%08X (SPU_CNT)\n", addr);
-                return spuCnt;
-            default:
-                ////std::printf("[Bus       ] Unhandled 16-bit read @ 0x%08X (SPU)\n", addr);
-                break;
-        }
-
-        return 0;
+        return spu::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u16));
     } else {
@@ -255,21 +242,7 @@ void write16(u32 addr, u16 data) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
         return timer::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SPU), static_cast<u32>(MemorySize::SPU))) {
-        switch (addr) {
-            case 0x1F801DA6:
-                //std::printf("[Bus       ] 16-bit write @ 0x%08X (SPU_ADDR) = 0x%04X\n", addr, data);
-
-                spuAddr = data;
-                break;
-            case 0x1F801DAA:
-                //std::printf("[Bus       ] 16-bit write @ 0x%08X (SPU_CNT) = 0x%04X\n", addr, data);
-
-                spuCnt = data;
-                break;
-            default:
-                ////std::printf("[Bus       ] Unhandled 16-bit write @ 0x%08X (SPU) = 0x%04X\n", addr, data);
-                break;
-        }
+        return spu::write(addr, data);
     } else {
         switch (addr) {
             case 0x1F801014:

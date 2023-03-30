@@ -15,6 +15,7 @@
 #include "../Mari.hpp"
 #include "../scheduler.hpp"
 #include "../timer/timer.hpp"
+#include "../spu/spu.hpp"
 
 namespace ps::gpu {
 
@@ -122,6 +123,8 @@ void scanlineEvent(i64 c) {
         intc::sendInterrupt(Interrupt::VBLANK);
 
         timer::gateVBLANKStart();
+
+        spu::save();
 
         update((u8 *)vram.data());
     } else if (lineCounter == SCANLINES_PER_FRAME) {

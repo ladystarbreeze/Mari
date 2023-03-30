@@ -17,6 +17,7 @@
 #include "dmac/dmac.hpp"
 #include "gpu/gpu.hpp"
 #include "sio/sio.hpp"
+#include "spu/spu.hpp"
 #include "timer/timer.hpp"
 
 #include <SDL2/SDL.h>
@@ -59,6 +60,7 @@ void init(const char *biosPath, const char *isoPath, const char *exePath) {
     dmac::init();
     gpu::init();
     sio::init();
+    spu::init();
     timer::init();
 
     scheduler::flush();
