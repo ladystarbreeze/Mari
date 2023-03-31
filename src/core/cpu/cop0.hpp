@@ -11,8 +11,13 @@ namespace ps::cpu::cop0 {
 
 /* Exception codes */
 enum Exception {
-    Interrupt  = 0x0,
-    SystemCall = 0x8,
+    Interrupt   = 0x0,
+    LoadError   = 0x4,
+    StoreError  = 0x5,
+    SystemCall  = 0x8,
+    Breakpoint  = 0x9,
+    Instruction = 0xA,
+    Overflow    = 0xC,
 };
 
 /* Exception names */
@@ -36,5 +41,6 @@ bool isCacheIsolated();
 
 void setBD(bool bd);
 void setEPC(u32 pc);
+void setBadVAddr(u32 addr);
 
 }

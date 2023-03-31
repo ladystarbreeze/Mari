@@ -59,6 +59,7 @@ struct Status {
 Cause cause;
 Status status;
 
+u32 badvaddr;
 u32 epc; // Exception program counter
 
 void checkInterrupt() {
@@ -76,6 +77,11 @@ u32 get(u32 idx) {
     u32 data;
 
     switch (idx) {
+        case static_cast<u32>(COP0Reg::JumpDest):
+        case static_cast<u32>(COP0Reg::DCIC    ):
+            return 0;
+        case static_cast<u32>(COP0Reg::BadVAddr):
+            return badvaddr;
         case static_cast<u32>(COP0Reg::Status):
             data  = status.cie;
             data |= status.cku <<  1;
@@ -206,6 +212,10 @@ void setBD(bool bd) {
 /* Sets the exception program counter */
 void setEPC(u32 pc) {
     epc = pc;
+}
+
+void setBadVAddr(u32 addr) {
+    badvaddr = addr;
 }
 
 }

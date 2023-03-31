@@ -94,6 +94,7 @@ enum SPECIALOpcode {
     JR      = 0x08,
     JALR    = 0x09,
     SYSCALL = 0x0C,
+    BREAK   = 0x0D,
     MFHI    = 0x10,
     MTHI    = 0x11,
     MFLO    = 0x12,
@@ -115,8 +116,10 @@ enum SPECIALOpcode {
 };
 
 enum REGIMMOpcode {
-    BLTZ = 0x00,
-    BGEZ = 0x01,
+    BLTZ   = 0x00,
+    BGEZ   = 0x01,
+    BLTZAL = 0x10,
+    BGEZAL = 0x11,
 };
 
 enum COPOpcode {
@@ -138,6 +141,8 @@ u32 regs[34]; // 32 GPRs, LO, HI
 u32 pc, cpc, npc; // Program counters
 
 bool inDelaySlot[2]; // Branch delay helper
+
+void raiseException(Exception);
 
 /* --- Register accessors --- */
 
@@ -161,7 +166,10 @@ void setPC(u32 addr) {
     if (addr & 3) {
         std::printf("[CPU       ] Misaligned PC: 0x%08X\n", addr);
 
-        exit(0);
+        //exit(0);
+        cop0::setBadVAddr(addr);
+
+        return raiseException(Exception::LoadError);
     }
 
     pc  = addr;
@@ -179,7 +187,10 @@ void setBranchPC(u32 addr) {
     if (addr & 3) {
         std::printf("[CPU       ] Misaligned branch PC: 0x%08X\n", addr);
 
-        exit(0);
+        //exit(0);
+        cop0::setBadVAddr(addr);
+
+        return raiseException(Exception::LoadError);
     }
 
     npc = addr;
@@ -337,9 +348,10 @@ void iADD(u32 instr) {
      * an arithmetic overflow occurred
      */
     if (!((regs[rs] ^ regs[rt]) & (1 << 31)) && ((regs[rs] ^ res) & (1 << 31))) {
-        std::printf("[CPU       ] ADD: Unhandled Arithmetic Overflow\n");
+        //std::printf("[CPU       ] ADD: Unhandled Arithmetic Overflow\n");
 
-        exit(0);
+        //exit(0);
+        return raiseException(Exception::Overflow);
     }
 
     set(rd, res);
@@ -362,9 +374,10 @@ void iADDI(u32 instr) {
      * an arithmetic overflow occurred
      */
     if (!((regs[rs] ^ imm) & (1 << 31)) && ((regs[rs] ^ res) & (1 << 31))) {
-        std::printf("[CPU       ] ADDI: Unhandled Arithmetic Overflow\n");
+        //std::printf("[CPU       ] ADDI: Unhandled Arithmetic Overflow\n");
 
-        exit(0);
+        //exit(0);
+        return raiseException(Exception::Overflow);
     }
 
     set(rt, res);
@@ -457,6 +470,20 @@ void iBGEZ(u32 instr) {
     }
 }
 
+/* Branch if Greater than or Equal Zero And Link */
+void iBGEZAL(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, (i32)regs[rs] >= 0, CPUReg::RA);
+
+    if (doDisasm) {
+        std::printf("[CPU       ] BGEZAL %s, 0x%08X; %s = 0x%08X\n", regNames[rs], target, regNames[rs], regs[rs]);
+    }
+}
+
 /* Branch if Greater Than Zero */
 void iBGTZ(u32 instr) {
     const auto rs = getRs(instr);
@@ -499,6 +526,20 @@ void iBLTZ(u32 instr) {
     }
 }
 
+/* Branch if Less Than Zero And Link */
+void iBLTZAL(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, (i32)regs[rs] < 0, CPUReg::RA);
+
+    if (doDisasm) {
+        std::printf("[CPU       ] BLTZAL %s, 0x%08X; %s = 0x%08X\n", regNames[rs], target, regNames[rs], regs[rs]);
+    }
+}
+
 /* Branch if Not Equal */
 void iBNE(u32 instr) {
     const auto rs = getRs(instr);
@@ -512,6 +553,15 @@ void iBNE(u32 instr) {
     if (doDisasm) {
         std::printf("[CPU       ] BNE %s, %s, 0x%08X; %s = 0x%08X, %s = 0x%08X\n", regNames[rs], regNames[rt], target, regNames[rs], regs[rs], regNames[rt], regs[rt]);
     }
+}
+
+/* BREAKpoint */
+void iBREAK() {
+    if (doDisasm) {
+        std::printf("[CPU       ] BREAK\n");
+    }
+
+    raiseException(Exception::Breakpoint);
 }
 
 /* Coprocessor move From Control */
@@ -572,10 +622,16 @@ void iDIV(u32 instr) {
     const auto n = (i32)regs[rs];
     const auto d = (i32)regs[rt];
 
-    assert((d != 0) && !((n == INT32_MIN) && (d == -1)));
-
-    regs[CPUReg::LO] = n / d;
-    regs[CPUReg::HI] = n % d;
+    if (!d) {
+        regs[CPUReg::LO] = (n < 0) ? 1 : -1;
+        regs[CPUReg::HI] = n;
+    } else if ((n == INT32_MIN) && (d == -1)) {
+        regs[CPUReg::LO] = INT32_MIN;
+        regs[CPUReg::HI] = 0;
+    } else {
+        regs[CPUReg::LO] = n / d;
+        regs[CPUReg::HI] = n % d;
+    }
 
     if (doDisasm) {
         std::printf("[EE Core   ] DIV %s, %s; LO = 0x%08X, HI = 0x%08X\n", regNames[rs], regNames[rt], regs[CPUReg::LO], regs[CPUReg::HI]);
@@ -590,10 +646,13 @@ void iDIVU(u32 instr) {
     const auto n = regs[rs];
     const auto d = regs[rt];
 
-    assert(d != 0);
-
-    regs[CPUReg::LO] = n / d;
-    regs[CPUReg::HI] = n % d;
+    if (!d) {
+        regs[CPUReg::LO] = -1;
+        regs[CPUReg::HI] = n;
+    } else {
+        regs[CPUReg::LO] = n / d;
+        regs[CPUReg::HI] = n % d;
+    }
 
     if (doDisasm) {
         std::printf("[EE Core   ] DIVU %s, %s; LO = 0x%08X, HI = 0x%08X\n", regNames[rs], regNames[rt], regs[CPUReg::LO], regs[CPUReg::HI]);
@@ -707,9 +766,12 @@ void iLH(u32 instr) {
     }
 
     if (addr & 1) {
-        std::printf("[CPU       ] LH: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+        //std::printf("[CPU       ] LH: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
-        exit(0);
+        //exit(0);
+        cop0::setBadVAddr(addr);
+
+        return raiseException(Exception::LoadError);
     }
 
     assert(!cop0::isCacheIsolated());
@@ -731,9 +793,12 @@ void iLHU(u32 instr) {
     }
 
     if (addr & 1) {
-        std::printf("[CPU       ] LHU: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+        //std::printf("[CPU       ] LHU: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
-        exit(0);
+        //exit(0);
+        cop0::setBadVAddr(addr);
+
+        return raiseException(Exception::LoadError);
     }
 
     assert(!cop0::isCacheIsolated());
@@ -768,9 +833,12 @@ void iLW(u32 instr) {
     }
 
     if (addr & 3) {
-        std::printf("[CPU       ] LW: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+        //std::printf("[CPU       ] LW: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
-        exit(0);
+        //exit(0);
+        cop0::setBadVAddr(addr);
+
+        return raiseException(Exception::LoadError);
     }
 
     assert(!cop0::isCacheIsolated());
@@ -792,9 +860,12 @@ void iLWC(int copN, u32 instr) {
     }
 
     if (addr & 3) {
-        std::printf("[CPU       ] LWC: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+        //std::printf("[CPU       ] LWC: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
-        exit(0);
+        //exit(0);
+        cop0::setBadVAddr(addr);
+
+        return raiseException(Exception::LoadError);
     }
 
     assert(!cop0::isCacheIsolated());
@@ -843,7 +914,7 @@ void iLWR(u32 instr) {
     }
 
     const auto shift = 8 * (addr & 3);
-    const auto mask = ~(~0 >> shift);
+    const auto mask = 0xFFFFFF00 << (24 - shift);
 
     set(rt, (regs[rt] & mask) | (read32(addr & ~3) >> shift));
 }
@@ -1057,9 +1128,12 @@ void iSH(u32 instr) {
     }
 
     if (addr & 1) {
-        std::printf("[CPU       ] SH: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+        //std::printf("[CPU       ] SH: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
-        exit(0);
+        //exit(0);
+        cop0::setBadVAddr(addr);
+
+        return raiseException(Exception::StoreError);
     }
 
     if (cop0::isCacheIsolated()) return;
@@ -1218,9 +1292,10 @@ void iSUB(u32 instr) {
      * an arithmetic overflow occurred
      */
     if (((regs[rs] ^ regs[rt]) & (1 << 31)) && ((regs[rs] ^ res) & (1 << 31))) {
-        std::printf("[CPU       ] SUB: Unhandled Arithmetic Overflow\n");
+        //std::printf("[CPU       ] SUB: Unhandled Arithmetic Overflow\n");
 
-        exit(0);
+        //exit(0);
+        return raiseException(Exception::Overflow);
     }
 
     set(rd, res);
@@ -1258,9 +1333,12 @@ void iSW(u32 instr) {
     }
 
     if (addr & 3) {
-        std::printf("[CPU       ] SW: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+        //std::printf("[CPU       ] SW: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
-        exit(0);
+        //exit(0);
+        cop0::setBadVAddr(addr);
+
+        return raiseException(Exception::StoreError);
     }
 
     if (cop0::isCacheIsolated()) return;
@@ -1292,9 +1370,12 @@ void iSWC(int copN, u32 instr) {
     }
 
     if (addr & 3) {
-        std::printf("[CPU       ] SWC: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+        //std::printf("[CPU       ] SWC: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
-        exit(0);
+        //exit(0);
+        cop0::setBadVAddr(addr);
+
+        return raiseException(Exception::StoreError);
     }
 
     if (cop0::isCacheIsolated()) return;
@@ -1311,10 +1392,10 @@ void iSWL(u32 instr) {
 
     const auto addr = regs[rs] + imm;
 
-    const auto shift = 24 - 8 * (addr & 3);
-    const auto mask  = ~(~0 >> shift);
+    const auto shift = 8 * (addr & 3);
+    const auto mask  = 0xFFFFFF00 << shift;
 
-    const auto data = (read32(addr & ~3) & mask) | (regs[rt] >> shift);
+    const auto data = (read32(addr & ~3) & mask) | (regs[rt] >> (24 - shift));
 
     if (doDisasm) {
         std::printf("[CPU       ] SWL %s, 0x%X(%s); [0x%08X] = 0x%08X\n", regNames[rt], imm, regNames[rs], addr, data);
@@ -1398,6 +1479,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::JR     : iJR(instr); break;
                     case SPECIALOpcode::JALR   : iJALR(instr); break;
                     case SPECIALOpcode::SYSCALL: iSYSCALL(); break;
+                    case SPECIALOpcode::BREAK  : iBREAK(); break;
                     case SPECIALOpcode::MFHI   : iMFHI(instr); break;
                     case SPECIALOpcode::MTHI   : iMTHI(instr); break;
                     case SPECIALOpcode::MFLO   : iMFLO(instr); break;
@@ -1427,13 +1509,24 @@ void decodeInstr(u32 instr) {
             {
                 const auto rt = getRt(instr);
 
-                switch (rt) {
-                    case REGIMMOpcode::BLTZ: iBLTZ(instr); break;
-                    case REGIMMOpcode::BGEZ: iBGEZ(instr); break;
+                switch (rt & 0x11) {
+                    case REGIMMOpcode::BLTZ:
+                        iBLTZ(instr);
+                        break;
+                    case REGIMMOpcode::BGEZ:
+                        iBGEZ(instr);
+                        break;
+                    case REGIMMOpcode::BLTZAL:
+                        iBLTZAL(instr);
+                        break;
+                    case REGIMMOpcode::BGEZAL:
+                        iBGEZAL(instr);
+                        break;
                     default:
-                        std::printf("[CPU       ] Unhandled REGIMM instruction 0x%02X (0x%08X) @ 0x%08X\n", rt, instr, cpc);
+                        //std::printf("[CPU       ] Unhandled REGIMM instruction 0x%02X (0x%08X) @ 0x%08X\n", rt, instr, cpc);
 
-                        exit(0);
+                        //exit(0);
+                        break;
                 }
             }
             break;
