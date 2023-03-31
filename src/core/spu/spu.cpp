@@ -29,6 +29,9 @@ constexpr u32 RAM_SIZE = 0x80000;
 static const i32 POS_XA_ADPCM_TABLE[] = { 0, 60, 115,  98, 112 };
 static const i32 NEG_XA_ADPCM_TABLE[] = { 0,  0, -52, -55, -60 };
 
+static const i32 INC_TABLE[] = {  7,  6,  5,  4 };
+static const i32 DEC_TABLE[] = { -8, -7, -6, -5 };
+
 /* --- SPU registers --- */
 
 enum class SPUReg {
@@ -89,8 +92,31 @@ struct SPUSTAT {
     bool cbuf;   // Current capture buffer
 };
 
+enum ADSR {
+    Off,
+    Attack,
+    Decay,
+    Sustain,
+    Release,
+};
+
 struct Voice {
     bool on; // Set by KON
+
+    ADSR adsr;
+
+    bool amode, dmode, smode, rmode;
+
+    bool adir, ddir, sdir, rdir;
+
+    i32 ashift, dshift, sshift, rshift;
+    i32 astep, dstep, sstep, rstep;
+
+    i32 slevel;
+
+    i32 adsrvol;
+
+    int adsrCounter, adsrStep;
 
     i16 voll, volr;
 
@@ -130,6 +156,119 @@ bool inRange(u64 addr, u64 base, u64 size) {
     return (addr >= base) && (addr < (base + size));
 }
 
+i32 clamp16(i32 a) {
+    if (a > 0x7FFF) return 0x7FFF;
+    
+    return (a < 0) ? 0 : a;
+}
+
+i32 clamp16S(i32 a) {
+    if (a > 0x7FFF) return 0x7FFF;
+    
+    return (a < -0x8000) ? -0x8000 : a;
+}
+
+/* Start ADSR in attack phase */
+void startADSR(int vID) {
+    auto &v = voices[vID];
+
+    v.adsr = ADSR::Attack;
+
+    v.adsrCounter = 1 << std::max(0, v.ashift - 11);
+    v.adsrStep = INC_TABLE[v.astep] << std::max(0, 11 - v.ashift);
+
+    if (v.amode && (v.adsrvol > 0x6000)) {
+        v.adsrCounter *= 4;
+    }
+}
+
+void doRelease(int vID) {
+    auto &v = voices[vID];
+
+    v.adsr = ADSR::Release;
+
+    v.adsrCounter = 1 << std::max(0, v.rshift - 11);
+    v.adsrStep = -8 << std::max(0, 11 - v.rshift);
+
+    if (v.rmode) v.adsrStep = (v.adsrStep * v.adsrvol) / 0x8000;
+}
+
+void stepADSR(int vID) {
+    auto &v = voices[vID];
+
+    assert(v.adsr != ADSR::Off);
+
+    if (--v.adsrCounter) return;
+
+    v.adsrvol = clamp16(v.adsrvol + v.adsrStep);
+
+    switch (v.adsr) {
+        case ADSR::Attack:
+            {
+                if (v.adsrvol == 0x7FFF) {
+                    v.adsr = ADSR::Decay;
+
+                    v.adsrCounter = 1 << std::max(0, v.dshift - 11);
+                    v.adsrStep = -8 << std::max(0, 11 - v.dshift);
+                    v.adsrStep = (v.adsrStep * v.adsrvol) / 0x8000;
+                } else {
+                    v.adsrCounter = 1 << std::max(0, v.ashift - 11);
+
+                    if (v.amode && (v.adsrvol > 0x6000)) {
+                        v.adsrCounter *= 4;
+                    }
+                }
+            }
+            break;
+        case ADSR::Decay:
+            {
+                if (v.adsrvol <= v.slevel) {
+                    v.adsr = ADSR::Sustain;
+
+                    v.adsrCounter = 1 << std::max(0, v.sshift - 11);
+                    v.adsrStep = ((v.sdir) ? DEC_TABLE[v.sstep] : INC_TABLE[v.sstep]) << std::max(0, 11 - v.sshift);
+
+                    if (v.smode) {
+                        if (v.sdir) v.adsrStep = (v.adsrStep * v.adsrvol) / 0x8000;
+                        if (!v.sdir && (v.adsrvol > 0x6000)) v.adsrCounter *= 4;
+                    }
+                } else {
+                    v.adsrCounter = 1 << std::max(0, v.dshift - 11);
+                    v.adsrStep = -8 << std::max(0, 11 - v.dshift);
+                    v.adsrStep = (v.adsrStep * v.adsrvol) / 0x8000;
+                }
+            }
+            break;
+        case ADSR::Sustain:
+            {
+                v.adsrCounter = 1 << std::max(0, v.sshift - 11);
+                v.adsrStep = ((v.sdir) ? DEC_TABLE[v.sstep] : INC_TABLE[v.sstep]) << std::max(0, 11 - v.sshift);
+
+                if (v.smode) {
+                    if (v.sdir) v.adsrStep = (v.adsrStep * v.adsrvol) / 0x8000;
+                    if (!v.sdir && (v.adsrvol > 0x6000)) v.adsrCounter *= 4;
+                }
+            }
+            break;
+        case ADSR::Release:
+            {
+                if (!v.adsrvol) {
+                    v.adsr = ADSR::Off;
+
+                    v.on = false;
+                } else {
+                    v.adsrCounter = 1 << std::max(0, v.rshift - 11);
+                    v.adsrStep = -8 << std::max(0, 11 - v.rshift);
+
+                    if (v.rmode) v.adsrStep = (v.adsrStep * v.adsrvol) / 0x8000;
+                }
+            }
+            break;
+        default:
+            assert(false);
+    }
+}
+
 /* Steps the SPU, calculates current sample */
 void step() {
     i32 sl = 0;
@@ -146,6 +285,8 @@ void step() {
 
                 std::memcpy(v.adpcmBlock, &ram[v.caddr], 16);
 
+                v.caddr += 16;
+
                 v.shift  = v.adpcmBlock[0] & 0xF;
                 v.filter = (v.adpcmBlock[0] >> 4) & 7;
 
@@ -158,18 +299,9 @@ void step() {
 
             const auto adpcmIdx = v.pitchCounter >> 12;
 
-            /* Increment pitch counter */
-            /* TODO: handle PMON */
-
-            u32 step = v.pitch;
-
-            if (step > 0x3FFF) step = 0x4000;
-
-            v.pitchCounter += step;
-
             /* Fetch new ADPCM sample */
 
-            for (int i = 0; i < 3; i++) v.s[i] = v.s[i + 1]; // Move old samples
+            for (int j = 0; j < 3; j++) v.s[j] = v.s[j + 1]; // Move old samples
 
             i32 s3 = (i16)((v.adpcmBlock[2 + (adpcmIdx >> 1)] >> (4 * (adpcmIdx & 1))) << 12) >> v.shift;
 
@@ -184,8 +316,19 @@ void step() {
 
             const auto s = gauss::interpolate(v.pitchCounter >> 3, v.s[0], v.s[1], v.s[2], v.s[3]);
 
-            sl += (s * v.voll) >> 15;
-            sr += (s * v.volr) >> 15;
+            stepADSR(i);
+
+            sl += (((s * v.voll) >> 15) * v.adsrvol) >> 15;
+            sr += (((s * v.volr) >> 15) * v.adsrvol) >> 15;
+
+            /* Increment pitch counter */
+            /* TODO: handle PMON */
+
+            u32 step = v.pitch;
+
+            if (step > 0x3FFF) step = 0x4000;
+
+            v.pitchCounter += step;
 
             if ((v.pitchCounter >> 12) >= 28) {
                 const auto flags = v.adpcmBlock[1];
@@ -196,12 +339,18 @@ void step() {
 
                 switch (flags & 3) {
                     case 0: case 2:
-                        v.caddr += 16;
                         break;
-                    case 3: case 1:
-                        v.caddr = v.loopaddr;
+                    case 1: // Release and force mute
+                        doRelease(i);
 
-                        v.on = false;
+                        v.adsrvol = 0;
+
+                        v.caddr = v.loopaddr;
+                        break;
+                    case 3: // Release
+                        doRelease(i);
+
+                        v.caddr = v.loopaddr;
                         break;
                 }
 
@@ -223,12 +372,7 @@ void step() {
 /* Handle Key Off event */
 void doKOFF() {
     for (int i = 0; i < 24; i++) {
-        auto &v = voices[i];
-
-        if (koff & (1 << i)) {
-            /* TODO: ADSR */
-            v.on = false;
-        }
+        if (koff & (1 << i)) doRelease(i);
     }
 }
 
@@ -243,6 +387,8 @@ void doKON() {
             v.caddr = 8 * v.addr;
 
             v.loopaddr = v.caddr;
+
+            startADSR(i);
 
             v.on = true;
         }
@@ -317,10 +463,10 @@ u16 read(u32 addr) {
         switch (addr & ~(0x1F << 4)) {
             case static_cast<u32>(SPUReg::VOLL):
                 std::printf("[SPU       ] 16-bit read @ V%u_VOLL\n", vID);
-                return v.voll;
+                return v.voll >> 1;
             case static_cast<u32>(SPUReg::VOLR):
                 std::printf("[SPU       ] 16-bit read @ V%u_VOLR\n", vID);
-                return v.volr;
+                return v.volr >> 1;
             case static_cast<u32>(SPUReg::PITCH):
                 std::printf("[SPU       ] 16-bit read @ V%u_PITCH\n", vID);
                 return v.pitch;
@@ -328,14 +474,14 @@ u16 read(u32 addr) {
                 std::printf("[SPU       ] 16-bit read @ V%u_ADDR\n", vID);
                 return v.addr;
             case static_cast<u32>(SPUReg::ADSR):
-                std::printf("[SPU       ] 16-bit read @ V%u_ADSR_HI\n", vID);
+                std::printf("[SPU       ] 16-bit read @ V%u_ADSR_LO\n", vID);
                 break;
             case static_cast<u32>(SPUReg::ADSR) + 2:
                 std::printf("[SPU       ] 16-bit read @ V%u_ADSR_HI\n", vID);
                 break;
             case static_cast<u32>(SPUReg::ADSRVOL):
                 //std::printf("[SPU       ] 16-bit read @ V%u_ADSRVOL\n", vID);
-                break;
+                return v.adsrvol;
             default:
                 std::printf("[SPU       ] Unhandled 16-bit voice %u read @ 0x%08X\n", vID, addr);
 
@@ -438,11 +584,11 @@ void write(u32 addr, u16 data) {
             case static_cast<u32>(SPUReg::VOLL):
                 std::printf("[SPU       ] 16-bit write @ V%u_VOLL = 0x%04X\n", vID, data);
 
-                v.voll = data;
+                v.voll = data << 1;
                 break;
             case static_cast<u32>(SPUReg::VOLR):
                 std::printf("[SPU       ] 16-bit write @ V%u_VOLR = 0x%04X\n", vID, data);
-                v.volr = data;
+                v.volr = data << 1;
                 break;
             case static_cast<u32>(SPUReg::PITCH):
                 std::printf("[SPU       ] 16-bit write @ V%u_PITCH = 0x%04X\n", vID, data);
@@ -456,12 +602,29 @@ void write(u32 addr, u16 data) {
                 break;
             case static_cast<u32>(SPUReg::ADSR):
                 std::printf("[SPU       ] 16-bit write @ V%u_ADSR_LO = 0x%04X\n", vID, data);
+
+                v.slevel = ((data & 0xF) + 1) * 0x800;
+                v.dshift = (data >>  4) & 0xF;
+                v.astep  = (data >>  8) & 3;
+                v.ashift = (data >> 10) & 0x1F;
+                v.amode  = data & (1 << 15);
                 break;
             case static_cast<u32>(SPUReg::ADSR) + 2:
                 std::printf("[SPU       ] 16-bit write @ V%u_ADSR_HI = 0x%04X\n", vID, data);
+
+                v.rshift = (data >> 0) & 0x1F;
+                v.rmode  = data & (1 << 5);
+                v.sstep  = (data >> 6) & 3;
+                v.sshift = (data >> 8) & 0x1F;
+                v.sdir   = data & (1 << 14);
+                v.smode  = data & (1 << 15);
                 break;
             case static_cast<u32>(SPUReg::ADSRVOL):
                 std::printf("[SPU       ] 16-bit write @ V%u_ADSRVOL = 0x%04X\n", vID, data);
+
+                v.adsrvol = data;
+
+                if (v.adsrvol < 0) v.adsrvol = 0;
                 break;
             case static_cast<u32>(SPUReg::LOOP):
                 std::printf("[SPU       ] 16-bit write @ V%u_LOOP = 0x%04X\n", vID, data);
