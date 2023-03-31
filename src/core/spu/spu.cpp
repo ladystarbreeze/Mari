@@ -290,7 +290,7 @@ void step() {
                 v.shift  = v.adpcmBlock[0] & 0xF;
                 v.filter = (v.adpcmBlock[0] >> 4) & 7;
 
-                if (v.shift > 12) v.shift  = 9;
+                if (v.shift > 12) v.shift = 9;
 
                 assert(v.filter < 5);
 
@@ -303,18 +303,20 @@ void step() {
 
             for (int j = 0; j < 3; j++) v.s[j] = v.s[j + 1]; // Move old samples
 
-            i32 s3 = (i16)((v.adpcmBlock[2 + (adpcmIdx >> 1)] >> (4 * (adpcmIdx & 1))) << 12) >> v.shift;
+            u8 nibble = (v.adpcmBlock[2 + (adpcmIdx >> 1)] >> (4 * (adpcmIdx & 1))) & 0xF;
+
+            i32 s3 = (i32)(i16)(nibble << 12) >> v.shift;
 
             /* Apply filter */
 
             const auto f0 = POS_XA_ADPCM_TABLE[v.filter];
             const auto f1 = NEG_XA_ADPCM_TABLE[v.filter];
 
-            s3 += (f0 * v.s[2] + f1 * v.s[1] + 32) >> 6;
+            s3 += (f0 * v.s[2] + f1 * v.s[1] + 32) / 64;
 
-            v.s[3] = (s3 > 0x7FFF) ? 0x7FFF : ((s3 < -0x8000) ? -0x8000 : s3);
+            v.s[3] = clamp16S(s3);
 
-            const auto s = gauss::interpolate(v.pitchCounter >> 3, v.s[0], v.s[1], v.s[2], v.s[3]);
+            const auto s = (i32)gauss::interpolate(v.pitchCounter >> 3, v.s[0], v.s[1], v.s[2], v.s[3]);
 
             stepADSR(i);
 
