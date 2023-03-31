@@ -15,6 +15,7 @@
 #include "../cdrom/cdrom.hpp"
 #include "../gpu/gpu.hpp"
 #include "../mdec/mdec.hpp"
+#include "../spu/spu.hpp"
 
 namespace ps::dmac {
 
@@ -92,7 +93,7 @@ void checkInterrupt();
 void transferEndEvent(int chnID) {
     auto &chcr = channels[chnID].chcr;
 
-    std::printf("[DMAC      ] Channel %d (%s) transfer end\n", chnID, chnNames[chnID]);
+    //std::printf("[DMAC      ] Channel %d (%s) transfer end\n", chnID, chnNames[chnID]);
 
     chcr.str = false;
 
@@ -115,7 +116,7 @@ Channel getChannel(u32 addr) {
         case 0x0D: return Channel::PIO;
         case 0x0E: return Channel::OTC;
         default:
-            std::printf("[DMAC      ] Unknown channel\n");
+            //std::printf("[DMAC      ] Unknown channel\n");
 
             exit(0);
     }
@@ -128,7 +129,7 @@ void doCDROM() {
     auto &chn  = channels[static_cast<int>(chnID)];
     auto &chcr = chn.chcr;
 
-    std::printf("[DMAC      ] CDROM transfer\n");
+    //std::printf("[DMAC      ] CDROM transfer\n");
 
     assert(!chcr.dir); // Always to RAM
     assert(chcr.mod == Mode::Burst); // Always burst?
@@ -155,7 +156,7 @@ void doGPU() {
     auto &chn  = channels[static_cast<int>(chnID)];
     auto &chcr = chn.chcr;
 
-    std::printf("[DMAC      ] GPU transfer\n");
+    //std::printf("[DMAC      ] GPU transfer\n");
 
     assert((chcr.mod == Mode::Slice) || (chcr.mod == Mode::LinkedList));
     assert(!chcr.dec); // Always incrementing?
@@ -224,7 +225,7 @@ void doMDECIN() {
     auto &chn  = channels[static_cast<int>(chnID)];
     auto &chcr = chn.chcr;
 
-    std::printf("[DMAC      ] MDEC_IN transfer\n");
+    //std::printf("[DMAC      ] MDEC_IN transfer\n");
 
     //assert(chcr.dir); // Always from RAM
     assert(chcr.mod == Mode::Slice); // Always slice?
@@ -255,7 +256,7 @@ void doMDECOUT() {
     auto &chn  = channels[static_cast<int>(chnID)];
     auto &chcr = chn.chcr;
 
-    std::printf("[DMAC      ] MDEC_OUT transfer\n");
+    //std::printf("[DMAC      ] MDEC_OUT transfer\n");
 
     //assert(chcr.dir); // Always from RAM
     assert(chcr.mod == Mode::Slice); // Always slice?
@@ -286,7 +287,7 @@ void doOTC() {
     auto &chn  = channels[static_cast<int>(chnID)];
     auto &chcr = chn.chcr;
 
-    std::printf("[DMAC      ] OTC transfer\n");
+    //std::printf("[DMAC      ] OTC transfer\n");
 
     assert(!chcr.dir); // Always to RAM
     assert(chcr.mod == Mode::Burst); // Always burst?
@@ -316,14 +317,24 @@ void doSPU() {
     auto &chn  = channels[static_cast<int>(chnID)];
     auto &chcr = chn.chcr;
 
-    std::printf("[DMAC      ] SPU transfer\n");
+    //std::printf("[DMAC      ] SPU transfer\n");
 
-    //assert(!chcr.dir); // Always to RAM?
     assert(chcr.mod == Mode::Slice); // Always slice?
     assert(!chcr.dec); // Always incrementing?
     assert(chn.len);
 
-    /* TODO: SPU DMA */
+    if (chcr.dir) {
+        for (int i = 0; i < (int)chn.len; i++) {
+            const auto data = bus::read32(chn.madr);
+
+            spu::writeRAM(data);
+            spu::writeRAM(data >> 16);
+
+            chn.madr += 4;
+        }
+    } else {
+        chn.madr += 4 * chn.len;
+    }
 
     scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * chn.len);
 
@@ -342,7 +353,7 @@ void startDMA(Channel chn) {
         case Channel::SPU    : doSPU(); break;
         case Channel::OTC    : doOTC(); break;
         default:
-            std::printf("[DMAC      ] Unhandled channel %d (%s) transfer\n", chn, chnNames[static_cast<int>(chn)]);
+            //std::printf("[DMAC      ] Unhandled channel %d (%s) transfer\n", chn, chnNames[static_cast<int>(chn)]);
 
             exit(0);
     }
@@ -354,7 +365,7 @@ void checkInterrupt() {
 
     dicr.mif = dicr.fi || (dicr.mie && (dicr.im & dicr.ip));
     
-    std::printf("[DMAC      ] MIF = %d\n", dicr.mif);
+    //std::printf("[DMAC      ] MIF = %d\n", dicr.mif);
 
     if (!oldMIF && dicr.mif) intc::sendInterrupt(Interrupt::DMA);
 }
@@ -362,11 +373,11 @@ void checkInterrupt() {
 void checkRunning(Channel chn) {
     const auto chnID = static_cast<int>(chn);
 
-    std::printf("[DMAC      ] Channel %d check\n", chnID);
+    //std::printf("[DMAC      ] Channel %d check\n", chnID);
 
     const bool cde = dpcr & (1 << (4 * chnID + 3));
 
-    std::printf("[DMAC      ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", chnID, channels[chnID].drq, chnID, cde, chnID, channels[chnID].chcr.str, chnID, channels[chnID].chcr.fst);
+    //std::printf("[DMAC      ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", chnID, channels[chnID].drq, chnID, cde, chnID, channels[chnID].chcr.str, chnID, channels[chnID].chcr.fst);
 
     if ((channels[chnID].drq || channels[chnID].chcr.fst) && cde && channels[chnID].chcr.str) startDMA(static_cast<Channel>(chnID));
 }
@@ -375,7 +386,7 @@ void checkRunningAll() {
     for (int i = 0; i < 7; i++) {
         const bool cde = dpcr & (1 << (4 * i + 3));
 
-        std::printf("[DMAC      ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", i, channels[i].drq, i, cde, i, channels[i].chcr.str, i, channels[i].chcr.fst);
+        //std::printf("[DMAC      ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", i, channels[i].drq, i, cde, i, channels[i].chcr.str, i, channels[i].chcr.fst);
 
         if ((channels[i].drq || channels[i].chcr.fst) && cde && channels[i].chcr.str) return startDMA(static_cast<Channel>(i));
     }
@@ -430,10 +441,10 @@ u32 read(u32 addr) {
     } else {
         switch (addr) {
             case static_cast<u32>(ControlReg::DPCR):
-                std::printf("[DMAC      ] 32-bit read @ DPCR\n");
+                //std::printf("[DMAC      ] 32-bit read @ DPCR\n");
                 return dpcr;
             case static_cast<u32>(ControlReg::DICR):
-                std::printf("[DMAC      ] 32-bit read @ DICR\n");
+                //std::printf("[DMAC      ] 32-bit read @ DICR\n");
 
                 data  = dicr.fi  << 15;
                 data |= dicr.im  << 16;
@@ -455,7 +466,7 @@ void write8(u32 addr, u8 data) {
     if (addr < static_cast<u32>(ControlReg::DPCR)) {
         switch (addr & ~(0xFF3)) {
             default:
-                std::printf("[DMAC      ] Unhandled 8-bit channel write @ 0x%08X = 0x%02X\n", addr, data);
+                //std::printf("[DMAC      ] Unhandled 8-bit channel write @ 0x%08X = 0x%02X\n", addr, data);
 
                 exit(0);
         }
@@ -465,7 +476,7 @@ void write8(u32 addr, u8 data) {
                 {
                     const auto offset = addr & 3;
 
-                    std::printf("[DMAC      ] 8-bit write @ DICR[%u] = 0x%08X\n", offset, data);
+                    //std::printf("[DMAC      ] 8-bit write @ DICR[%u] = 0x%08X\n", offset, data);
 
                     switch (offset) {
                         case 1:
@@ -499,12 +510,12 @@ void write32(u32 addr, u32 data) {
 
         switch (addr & ~(0xFF0)) {
             case static_cast<u32>(ChannelReg::MADR):
-                std::printf("[DMAC      ] 32-bit write @ D%u_MADR = 0x%08X\n", chnID, data);
+                //std::printf("[DMAC      ] 32-bit write @ D%u_MADR = 0x%08X\n", chnID, data);
 
                 chn.madr = data & 0xFFFFFC;
                 break;
             case static_cast<u32>(ChannelReg::BCR):
-                std::printf("[DMAC      ] 32-bit write @ D%u_BCR = 0x%08X\n", chnID, data);
+                //std::printf("[DMAC      ] 32-bit write @ D%u_BCR = 0x%08X\n", chnID, data);
 
                 chn.size  = data;
                 chn.count = data >> 16;
@@ -515,7 +526,7 @@ void write32(u32 addr, u32 data) {
                 {
                     auto &chcr = chn.chcr;
 
-                    std::printf("[DMAC      ] 32-bit write @ D%u_CHCR = 0x%08X\n", chnID, data);
+                    //std::printf("[DMAC      ] 32-bit write @ D%u_CHCR = 0x%08X\n", chnID, data);
 
                     chcr.dir = data & (1 << 0);
                     chcr.dec = data & (1 << 1);
@@ -536,23 +547,23 @@ void write32(u32 addr, u32 data) {
     } else {
         switch (addr) {
             case static_cast<u32>(ControlReg::DPCR):
-                std::printf("[DMAC      ] 32-bit write @ DPCR = 0x%08X\n", data);
+                //std::printf("[DMAC      ] 32-bit write @ DPCR = 0x%08X\n", data);
 
                 dpcr = data;
 
                 //checkRunningAll();
                 break;
             case static_cast<u32>(ControlReg::DICR):
-                std::printf("[DMAC      ] 32-bit write @ DICR = 0x%08X\n", data);
+                //std::printf("[DMAC      ] 32-bit write @ DICR = 0x%08X\n", data);
 
-                std::printf("[DMAC      ] 0x%02X, 0x%02X\n", (data >> 16) & 0x7F, (data >> 24) & 0x7F);
+                //std::printf("[DMAC      ] 0x%02X, 0x%02X\n", (data >> 16) & 0x7F, (data >> 24) & 0x7F);
 
                 dicr.fi  = data & (1 << 15);
                 dicr.im  = (data >> 16) & 0x7F;
                 dicr.mie = data & (1 << 23);
                 dicr.ip  = (dicr.ip & ~(data >> 24)) & 0x7F;
 
-                std::printf("[DMAC      ] IM = 0x%02X, IP = 0x%02X\n", dicr.im, dicr.ip);
+                //std::printf("[DMAC      ] IM = 0x%02X, IP = 0x%02X\n", dicr.im, dicr.ip);
 
                 checkInterrupt();
                 break;
