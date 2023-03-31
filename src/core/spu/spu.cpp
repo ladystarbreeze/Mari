@@ -26,6 +26,9 @@ constexpr i64 SPU_RATE = 0x300;
 constexpr u32 SPU_BASE = 0x1F801C00;
 constexpr u32 RAM_SIZE = 0x80000;
 
+static const i32 POS_XA_ADPCM_TABLE[] = { 0, 60, 115,  98, 112 };
+static const i32 NEG_XA_ADPCM_TABLE[] = { 0,  0, -52, -55, -60 };
+
 /* --- SPU registers --- */
 
 enum class SPUReg {
@@ -99,6 +102,8 @@ struct Voice {
     u8   adpcmBlock[16];
     bool hasBlock;
 
+    int shift, filter;
+
     i16 s[4]; // Most recent samples
 };
 
@@ -116,6 +121,8 @@ u32 spuaddr, caddr; // SPU address, current address
 
 Voice voices[24];
 
+i16 mvoll, mvolr;
+
 u64 idStep;
 
 /* Returns true if address is in range [base;size] */
@@ -125,8 +132,8 @@ bool inRange(u64 addr, u64 base, u64 size) {
 
 /* Steps the SPU, calculates current sample */
 void step() {
-    sound[2 * soundIdx + 0] = 0;
-    sound[2 * soundIdx + 1] = 0;
+    i32 sl = 0;
+    i32 sr = 0;
 
     if (spucnt.spuen && spucnt.unmute) {
         for (int i = 0; i < 24; i++) {
@@ -139,14 +146,22 @@ void step() {
 
                 std::memcpy(v.adpcmBlock, &ram[v.caddr], 16);
 
+                v.shift  = v.adpcmBlock[0] & 0xF;
+                v.filter = (v.adpcmBlock[0] >> 4) & 7;
+
+                if (v.shift > 12) v.shift  = 9;
+
+                assert(v.filter < 5);
+
                 v.hasBlock = true;
             }
 
+            const auto adpcmIdx = v.pitchCounter >> 12;
+
             /* Increment pitch counter */
+            /* TODO: handle PMON */
 
             u32 step = v.pitch;
-
-            /* TODO: handle PMON */
 
             if (step > 0x3FFF) step = 0x4000;
 
@@ -154,22 +169,25 @@ void step() {
 
             /* Fetch new ADPCM sample */
 
-            const auto adpcmIdx = v.pitchCounter >> 12;
+            for (int i = 0; i < 3; i++) v.s[i] = v.s[i + 1]; // Move old samples
 
-            if (adpcmIdx < 28) {
-                /* Move old samples */
+            i32 s3 = (i16)((v.adpcmBlock[2 + (adpcmIdx >> 1)] >> (4 * (adpcmIdx & 1))) << 12) >> v.shift;
 
-                for (int i = 0; i < 3; i++) {
-                    v.s[i] = v.s[i + 1];
-                }
+            /* Apply filter */
 
-                v.s[3] = (i16)(i8)((v.adpcmBlock[2 + (adpcmIdx >> 1)] >> (4 * (adpcmIdx & 1))) << 4);
+            const auto f0 = POS_XA_ADPCM_TABLE[v.filter];
+            const auto f1 = NEG_XA_ADPCM_TABLE[v.filter];
 
-                const auto s = gauss::interpolate(v.pitchCounter >> 3, v.s[0], v.s[1], v.s[2], v.s[3]);
+            s3 += (f0 * v.s[2] + f1 * v.s[1] + 32) >> 6;
 
-                sound[2 * soundIdx + 0] += s * (v.voll >> 7);
-                sound[2 * soundIdx + 1] += s * (v.volr >> 7);
-            } else {
+            v.s[3] = (s3 > 0x7FFF) ? 0x7FFF : ((s3 < -0x8000) ? -0x8000 : s3);
+
+            const auto s = gauss::interpolate(v.pitchCounter >> 3, v.s[0], v.s[1], v.s[2], v.s[3]);
+
+            sl += (s * v.voll) >> 15;
+            sr += (s * v.volr) >> 15;
+
+            if ((v.pitchCounter >> 12) >= 28) {
                 const auto flags = v.adpcmBlock[1];
 
                 if (flags & (1 << 2)) {
@@ -193,6 +211,9 @@ void step() {
             }
         }
     }
+
+    sound[2 * soundIdx + 0] = (sl * mvoll) >> 15;
+    sound[2 * soundIdx + 1] = (sr * mvolr) >> 15;
 
     soundIdx++;
 
@@ -456,9 +477,13 @@ void write(u32 addr, u16 data) {
         switch (addr) {
             case static_cast<u32>(SPUReg::MVOLL):
                 std::printf("[SPU       ] 16-bit write @ MVOLL = 0x%04X\n", data);
+
+                mvoll = data << 1;
                 break;
             case static_cast<u32>(SPUReg::MVOLR):
                 std::printf("[SPU       ] 16-bit write @ MVOLR = 0x%04X\n", data);
+
+                mvolr = data << 1;
                 break;
             case static_cast<u32>(SPUReg::VLOUT):
                 std::printf("[SPU       ] 16-bit write @ VLOUT = 0x%04X\n", data);
