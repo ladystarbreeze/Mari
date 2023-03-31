@@ -661,6 +661,18 @@ void drawRect65() {
     state = GPUState::ReceiveCommand;
 }
 
+/* GP0(0x68) Draw Flat Rectangle (1x1) */
+void drawRect68() {
+    const auto c = cmdParam.front(); cmdParam.pop();
+    const auto v = cmdParam.front(); cmdParam.pop();
+
+    Vertex v0 = Vertex(v, c);
+
+    drawFlatRect(v0, 1, 1, c);
+
+    state = GPUState::ReceiveCommand;
+}
+
 /* GP0(0x74) Draw Textured Rectangle (8x8, opaque) */
 void drawRect74() {
     const auto c = cmdParam.front(); cmdParam.pop();
@@ -895,6 +907,7 @@ void writeGP0(u32 data) {
                         setArgCount(6);
                         break;
                     case 0x28:
+                    case 0x29:
                     case 0x2A:
                     case 0x2B:
                         //std::printf("[GPU:GP0   ] Draw Flat Quad (opaque)\n");
@@ -966,6 +979,13 @@ void writeGP0(u32 data) {
                         cmdParam.push(data); // Also first argument
 
                         setArgCount(3);
+                        break;
+                    case 0x68:
+                        //std::printf("[GPU:GP0   ] Draw Flat Rectangle (1x1)\n");
+
+                        cmdParam.push(data); // Also first argument
+
+                        setArgCount(1);
                         break;
                     case 0x78:
                         //std::printf("[GPU:GP0   ] Draw Flat Rectangle (8x8)\n");
@@ -1071,6 +1091,7 @@ void writeGP0(u32 data) {
                         drawTri24();
                         break;
                     case 0x28:
+                    case 0x29:
                     case 0x2A:
                     case 0x2B:
                         drawQuad28();
@@ -1107,6 +1128,7 @@ void writeGP0(u32 data) {
                     case 0x67:
                         drawRect65();
                         break;
+                    case 0x68: drawRect68(); break;
                     case 0x74:
                     case 0x75:
                         drawRect74();
