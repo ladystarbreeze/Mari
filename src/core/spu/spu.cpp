@@ -89,6 +89,8 @@ struct SPUSTAT {
 struct Voice {
     bool on; // Set by KON
 
+    i16 voll, volr;
+
     u16 pitch;
     u32 pitchCounter;
 
@@ -102,7 +104,7 @@ struct Voice {
 
 std::vector<u8> ram;
 
-i16 sound[2048];
+i16 sound[2 * 2048];
 int soundIdx = 0;
 
 SPUCNT  spucnt;
@@ -123,7 +125,8 @@ bool inRange(u64 addr, u64 base, u64 size) {
 
 /* Steps the SPU, calculates current sample */
 void step() {
-    sound[soundIdx] = 0;
+    sound[2 * soundIdx + 0] = 0;
+    sound[2 * soundIdx + 1] = 0;
 
     if (spucnt.spuen && spucnt.unmute) {
         for (int i = 0; i < 24; i++) {
@@ -135,8 +138,6 @@ void step() {
                 /* Load new ADPCM block */
 
                 std::memcpy(v.adpcmBlock, &ram[v.caddr], 16);
-
-                v.caddr += 16;
 
                 v.hasBlock = true;
             }
@@ -162,18 +163,22 @@ void step() {
                     v.s[i] = v.s[i + 1];
                 }
 
-                v.s[3] = 64 * (i16)(i8)((v.adpcmBlock[2 + (adpcmIdx >> 1)] >> (4 * (adpcmIdx & 1))) << 4);
+                v.s[3] = (i16)(i8)((v.adpcmBlock[2 + (adpcmIdx >> 1)] >> (4 * (adpcmIdx & 1))) << 4);
 
-                sound[soundIdx] += gauss::interpolate(v.pitchCounter >> 3, v.s[0], v.s[1], v.s[2], v.s[3]);
+                const auto s = gauss::interpolate(v.pitchCounter >> 3, v.s[0], v.s[1], v.s[2], v.s[3]);
+
+                sound[2 * soundIdx + 0] += s * (v.voll >> 7);
+                sound[2 * soundIdx + 1] += s * (v.volr >> 7);
             } else {
                 const auto flags = v.adpcmBlock[1];
 
                 if (flags & (1 << 2)) {
-                    v.loopaddr = v.addr;
+                    v.loopaddr = v.caddr;
                 }
 
                 switch (flags & 3) {
                     case 0: case 2:
+                        v.caddr += 16;
                         break;
                     case 3: case 1:
                         v.caddr = v.loopaddr;
@@ -216,6 +221,8 @@ void doKON() {
 
             v.caddr = 8 * v.addr;
 
+            v.loopaddr = v.caddr;
+
             v.on = true;
         }
     }
@@ -248,7 +255,7 @@ void save() {
 
     file.open("snd.bin", std::ios::out | std::ios::binary | std::ios::app);
 
-    file.write((char *)sound, 2 * soundIdx);
+    file.write((char *)sound, 4 * soundIdx);
 
     file.close();
 
@@ -289,10 +296,10 @@ u16 read(u32 addr) {
         switch (addr & ~(0x1F << 4)) {
             case static_cast<u32>(SPUReg::VOLL):
                 std::printf("[SPU       ] 16-bit read @ V%u_VOLL\n", vID);
-                break;
+                return v.voll;
             case static_cast<u32>(SPUReg::VOLR):
                 std::printf("[SPU       ] 16-bit read @ V%u_VOLR\n", vID);
-                break;
+                return v.volr;
             case static_cast<u32>(SPUReg::PITCH):
                 std::printf("[SPU       ] 16-bit read @ V%u_PITCH\n", vID);
                 return v.pitch;
@@ -409,9 +416,12 @@ void write(u32 addr, u16 data) {
         switch (addr & ~(0x1F << 4)) {
             case static_cast<u32>(SPUReg::VOLL):
                 std::printf("[SPU       ] 16-bit write @ V%u_VOLL = 0x%04X\n", vID, data);
+
+                v.voll = data;
                 break;
             case static_cast<u32>(SPUReg::VOLR):
                 std::printf("[SPU       ] 16-bit write @ V%u_VOLR = 0x%04X\n", vID, data);
+                v.volr = data;
                 break;
             case static_cast<u32>(SPUReg::PITCH):
                 std::printf("[SPU       ] 16-bit write @ V%u_PITCH = 0x%04X\n", vID, data);
